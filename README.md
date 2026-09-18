@@ -61,11 +61,17 @@ Three layers, meeting at one seam.
 
 2. **Observation.** A hand-assembled **seccomp filter** (built with `ctypes`, no
    libseccomp, no eBPF toolchain) sorts every syscall into three classes:
-   - **hard-deny** — refused in-kernel with `EPERM`, no userspace round trip
-     (`ptrace`, `mount`, `bpf`, `io_uring`, `setns`, …).
+   - **bypass-deny** — refused in-kernel with `EPERM`, no userspace round trip.
+     Reserved for the handful of syscalls whose only purpose is to defeat the
+     monitor itself (`io_uring`, `open_by_handle_at`, a second `seccomp`
+     filter), where parking the call for a verdict would itself be the risk.
    - **notify** — parked and handed to the supervisor via
      `SECCOMP_RET_USER_NOTIF`, which reads the arguments out of the target's
-     memory (TOCTOU-safe, see below) and judges them.
+     memory (TOCTOU-safe, see below) and judges them. This set includes the
+     **escape/tamper** syscalls (`ptrace`, `mount`, `unshare`, `bpf`, `chroot`,
+     `setns`, module loading, …), which are always judged as a **visible,
+     freezing violation** — an escape attempt is contained *and* seen, not
+     blocked silently.
    - **allow** — everything a normal program needs.
 
 3. **Response.** On a violation the supervisor writes `cgroup.freeze`, stopping
@@ -160,7 +166,9 @@ See [`DEMO.md`](DEMO.md) for the full runbook. The short version:
 3. Run **`exfil_network.py`** under the `loopback` policy → caught at `connect()`
    to a public IP: *attempted outbound connection to 93.184.216.34:443*.
 4. Run **`escape_attempt.py`** → six classic sandbox escapes
-   (`ptrace`, `mount`, `unshare`, `bpf`, …) each refused in-kernel.
+   (`ptrace`, `mount`, `unshare`, `bpf`, …); the first one (`ptrace`) trips a
+   red **VIOLATION** and the panel goes **FROZEN** — *attempted to attach a
+   debugger (ptrace)* — before any escape runs.
 
 ![the drag-and-drop entry point](docs/dashboard_upload_idle.png)
 ![a dropped file, contained](docs/dashboard_upload_contained.png)
@@ -211,6 +219,12 @@ VM-grade boundary ([`packaging/run_in_vm.md`](packaging/run_in_vm.md)).
   unaffected).
 - `x86-64 only` — the filter refuses other architectures by design rather than
   guessing their syscall tables.
+
+## Changelog
+
+Version history is in [`CHANGELOG.md`](CHANGELOG.md). The running build's
+version (`cerberus/__init__.py`) shows in the app window header and the
+`run-native.sh` startup line; `sudo python3 -m cerberus.doctor` prints it too.
 
 ## License
 

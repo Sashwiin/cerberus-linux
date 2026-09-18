@@ -313,11 +313,11 @@ def launch(
             # escalation through any binary we bind-mounted in.
             seccomp.set_no_new_privs()
             # Drop root BEFORE installing the filter, not after: setuid/setgid
-            # are in the hard-deny set, so a post-filter drop would be refused by
-            # our own filter. With NO_NEW_PRIVS already set, an unprivileged
-            # process is still allowed to install a seccomp filter, so the order
-            # setup(root) -> drop -> install -> exec keeps the whole payload off
-            # root while losing nothing.
+            # are escape-class syscalls, so a post-filter drop would be parked
+            # and frozen as a violation by our own monitor. With NO_NEW_PRIVS
+            # already set, an unprivileged process is still allowed to install a
+            # seccomp filter, so the order setup(root) -> drop -> install -> exec
+            # keeps the whole payload off root while losing nothing.
             _drop_privileges(spec.uid, spec.gid)
             fd = seccomp.install_filter(notify, deny, default_allow, allow)
 

@@ -21,4 +21,8 @@ if ! command -v pkexec >/dev/null 2>&1 && ! command -v sudo >/dev/null 2>&1; the
 fi
 
 cd "$HERE"
-exec python3 -m cerberus.gui
+# Wipe stale compiled bytecode so an extract-over-old-copy can't run old code.
+find "$HERE" -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
+ver="$(python3 -c 'import cerberus; print(cerberus.__version__)' 2>/dev/null || echo '?')"
+echo "Cerberus v$ver  —  running from $(pwd)"
+exec python3 -B -m cerberus.gui   # -B: don't write .pyc, never reuse stale ones

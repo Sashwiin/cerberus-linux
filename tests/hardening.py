@@ -83,6 +83,17 @@ assert val==0, 'residual capabilities'
 """)
     ok &= check("no effective capabilities", r.exit_code == 0)
 
+    print("== reading own /proc maps is clean (version-independent) ==")
+    # Python 3.14 reads /proc/<pid>/maps at startup; 3.12 doesn't. This must not
+    # be a policy decision, or the same file gets two verdicts on two machines.
+    r = run(b"open('/proc/1/maps').read(); open('/proc/self/maps').read();"
+            b" print('ok')")
+    ok &= check("/proc/*/maps reads are clean", r.verdict == "clean",
+                f"({r.verdict})")
+    r = run(b"\ntry:\n open('/proc/1/mem','rb').read(1)\nexcept Exception: pass\n")
+    ok &= check("/proc/*/mem is still refused", r.verdict == "contained",
+                f"({r.verdict})")
+
     print("== benign control still runs clean ==")
     with open(os.path.join(os.path.dirname(os.path.dirname(__file__)),
                            "payloads", "benign_wordcount.py"), "rb") as fh:

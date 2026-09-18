@@ -126,7 +126,8 @@ class CerberusGUI:
             c.create_oval(cx - 2, 15, cx + 2, 19, fill=BAD, outline="")
         tk.Label(h, text="Cerberus", bg=PANEL2, fg=INK,
                  font=("DejaVu Sans", 15, "bold")).place(x=70, y=10)
-        tk.Label(h, text="ephemeral sandbox · real-time syscall defense",
+        from . import __version__
+        tk.Label(h, text=f"ephemeral sandbox · real-time syscall defense · v{__version__}",
                  bg=PANEL2, fg=DIM, font=("DejaVu Sans", 9)).place(x=70, y=36)
 
         # Persistent execution-mode badge (always visible, top-right): tells you
@@ -399,7 +400,8 @@ class CerberusGUI:
     def _worker(self, name: str, interp: str, data: bytes) -> None:
         """Spawn the elevated helper and read its JSON event stream."""
         pybin = _find_python()
-        helper = [pybin, "-m", "cerberus.helper", "--policy", self.policy.get(),
+        # -B: ignore/never write .pyc, so a stale __pycache__ can't run old code
+        helper = [pybin, "-B", "-m", "cerberus.helper", "--policy", self.policy.get(),
                   "--net", self.net.get(), "--name", name, "--interp", interp,
                   "--b64"]
         env = dict(os.environ)

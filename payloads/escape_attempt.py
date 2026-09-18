@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""VILLAIN #3 — sandbox escape attempts, each refused in-kernel.
+"""VILLAIN #3 — sandbox escape attempts, caught and contained.
 
-Walks a checklist of classic container/namespace escapes. None of these ever
-reach userspace-monitor adjudication: they are in the hard-deny set, so the
-seccomp filter refuses them with EPERM before the kernel acts. This shows the
-two-tier design — cheap deterministic blocking for calls that are never
-legitimate, contextual judgement for the rest.
+Walks a checklist of classic container/namespace escapes: ptrace, mount,
+unshare a user namespace, load a BPF program, load a kernel module, chroot.
+Each of these is an escape-class syscall — never legitimate for sandboxed code
+— so the monitor parks the very first one (ptrace), raises a VIOLATION, and
+freezes the sandbox before the syscall runs. The escape never happens, and it
+shows up as CONTAINED rather than being blocked silently. In practice the
+payload freezes on line one and the lines below never print.
 """
 import ctypes
 import os

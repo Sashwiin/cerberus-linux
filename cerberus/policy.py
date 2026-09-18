@@ -6,11 +6,16 @@ contextual rules on top of it are default-deny too.** A blocklist of
 "known bad" behaviour is the documented weakness of lightweight sandboxing
 tools — it cannot describe an attack nobody has written yet. So:
 
-  * Syscalls are sorted into three classes. Anything in HARD_DENY is refused
-    in-kernel with no userspace round trip. Anything in NOTIFY is parked and
-    judged on its arguments. Everything else is allowed, and that residual
-    allow-set is itself an explicit, reviewable list (`BASELINE_ALLOW`) that
-    the strict profile enforces rather than a silent catch-all.
+  * Syscalls are sorted into classes. A small BYPASS_DENY set (pure
+    monitor-defeating vectors like io_uring and a second seccomp filter) is
+    refused in-kernel with no userspace round trip. The NOTIFY set is parked
+    and judged on its arguments -- and that set includes the ESCAPE syscalls
+    (ptrace, mount, unshare, bpf, chroot, module loading, ...), which are
+    always judged as a visible, freezing violation rather than blocked
+    silently, so an escape attempt reads as CONTAINED, not CLEAN. Everything
+    else is allowed, and that residual allow-set is itself an explicit,
+    reviewable list (`BASELINE_ALLOW`) that the strict profile enforces rather
+    than a silent catch-all.
   * Contextual rules answer "is this argument permitted", not "is this
     argument on a bad list". A file read is allowed because its path sits
     under an allowed prefix, not because it failed to match a secret pattern.
@@ -74,10 +79,48 @@ def _violation(rule: str, summary: str, **detail) -> Verdict:
 
 # ------------------------------------------------------- syscall classes
 
-# Refused in-kernel. These have no legitimate use inside an untrusted-code
-# sandbox, and every one of them is a documented route out of a namespace
-# jail or a way to blind the monitor.
-HARD_DENY_NAMES = (
+# Two ways to refuse a dangerous syscall, and the difference is the whole point
+# of what a "villain" file looks like on screen:
+#
+#   * BYPASS_DENY -- refused *in-kernel* with EPERM, no userspace round trip.
+#     The payload gets an error code and the monitor never hears about it, so
+#     the attempt is invisible. We use this ONLY for syscalls whose entire
+#     purpose is to defeat the monitor itself: if we parked one of these for a
+#     verdict, the act of parking could be the thing that's exploited. For
+#     everything else, invisibility is the wrong behaviour -- a blocked escape
+#     that reads as "clean" is confusing and undersells the defence.
+#
+#   * ESCAPE -- parked like any NOTIFY syscall, judged, and turned into a
+#     VISIBLE violation that freezes the sandbox (CONTAINED). These are the
+#     classic sandbox-escape / tamper attempts. Blocking them silently in the
+#     kernel made a file full of escape attempts show up as CLEAN, which is
+#     exactly backwards: trying to attach a debugger or rebuild the mount table
+#     is the single most incriminating thing untrusted code can do. So we park
+#     the syscall (it never runs -- an unanswered notification blocks it in the
+#     kernel forever), raise the violation, and freeze. The escape is still
+#     100% prevented; it is now also *seen*.
+
+# Refused in-kernel with EPERM, no notification. Reserved for pure
+# monitor-bypass vectors -- parking these for a verdict is itself the risk.
+BYPASS_DENY_NAMES = (
+    # io_uring: submits I/O from a kernel worker thread, historically a way to
+    # perform file and socket operations that a seccomp filter never sees. The
+    # setup call is the choke point, and it stays a hard in-kernel refusal
+    # rather than a parked notification.
+    "io_uring_setup", "io_uring_enter", "io_uring_register",
+    # Filesystem access that sidesteps path resolution entirely -- resolves a
+    # file by an opaque handle instead of a path the monitor can read.
+    "open_by_handle_at", "name_to_handle_at",
+    # Installing a *second* seccomp filter would let the payload park its own
+    # syscalls and answer them itself, defeating this monitor from the inside.
+    "seccomp",
+)
+
+# Parked, judged, and turned into a visible CONTAINED violation. Every one of
+# these is a documented route out of a namespace jail, a way to tamper with the
+# host, or an attempt to blind the monitor -- and none of them has a legitimate
+# use inside untrusted sandboxed code, so any attempt is a violation on sight.
+ESCAPE_NAMES = (
     # Debugger interfaces: read and write another process's memory.
     "ptrace", "process_vm_readv", "process_vm_writev", "kcmp",
     # Namespace and mount manipulation: re-entering or rebuilding the jail.
@@ -90,14 +133,6 @@ HARD_DENY_NAMES = (
     # Tracing and kernel programmability: would let the payload watch or
     # subvert the monitor itself.
     "bpf", "perf_event_open",
-    # io_uring: submits I/O from a kernel worker thread, historically a way to
-    # perform file and socket operations that a seccomp filter never sees.
-    # This one is the difference between a filter that holds and one that is
-    # trivially bypassed, and it is the most commonly missed entry on this
-    # list.
-    "io_uring_setup", "io_uring_enter", "io_uring_register",
-    # Filesystem access that sidesteps path resolution entirely.
-    "open_by_handle_at", "name_to_handle_at",
     # Device node creation: a fresh /dev/sda is a way around a read-only bind.
     "mknod", "mknodat",
     # Fault handling and key management, both used for sandbox escapes.
@@ -109,10 +144,64 @@ HARD_DENY_NAMES = (
     "iopl", "ioperm", "quotactl", "quotactl_fd",
     # Descriptor theft across processes.
     "pidfd_getfd",
-    # Installing a *second* seccomp filter would let the payload park its own
-    # syscalls and answer them itself.
-    "seccomp",
 )
+
+# Human-readable descriptions for the violation summary. A syscall not listed
+# here falls back to a generic "attempted a sandbox-escape syscall (<name>)".
+ESCAPE_LABELS = {
+    "ptrace": "attach a debugger to another process (ptrace)",
+    "process_vm_readv": "read another process's memory (process_vm_readv)",
+    "process_vm_writev": "write into another process's memory (process_vm_writev)",
+    "kcmp": "probe another process via kcmp",
+    "mount": "mount a filesystem",
+    "umount2": "unmount a filesystem",
+    "pivot_root": "change the root filesystem (pivot_root)",
+    "chroot": "change the root directory (chroot)",
+    "setns": "join another namespace (setns)",
+    "unshare": "create a new namespace (unshare)",
+    "open_tree": "clone a mount tree (open_tree)",
+    "move_mount": "relocate a mount (move_mount)",
+    "fsopen": "open a filesystem context (fsopen)",
+    "fsconfig": "configure a filesystem context (fsconfig)",
+    "fsmount": "create a mount from a filesystem context (fsmount)",
+    "fspick": "pick a filesystem context (fspick)",
+    "mount_setattr": "change mount attributes (mount_setattr)",
+    "init_module": "load a kernel module (init_module)",
+    "finit_module": "load a kernel module (finit_module)",
+    "delete_module": "unload a kernel module (delete_module)",
+    "kexec_load": "load a replacement kernel (kexec_load)",
+    "kexec_file_load": "load a replacement kernel (kexec_file_load)",
+    "bpf": "load a BPF program (bpf)",
+    "perf_event_open": "open a kernel performance counter (perf_event_open)",
+    "mknod": "create a device node (mknod)",
+    "mknodat": "create a device node (mknodat)",
+    "userfaultfd": "install a userfaultfd handler",
+    "add_key": "add a kernel key (add_key)",
+    "request_key": "request a kernel key (request_key)",
+    "keyctl": "manipulate the kernel keyring (keyctl)",
+    "setuid": "change user id (setuid)",
+    "setgid": "change group id (setgid)",
+    "setresuid": "change user id (setresuid)",
+    "setresgid": "change group id (setresgid)",
+    "setreuid": "change user id (setreuid)",
+    "setregid": "change group id (setregid)",
+    "capset": "grant itself capabilities (capset)",
+    "sethostname": "change the host name (sethostname)",
+    "setdomainname": "change the domain name (setdomainname)",
+    "reboot": "reboot the machine (reboot)",
+    "swapon": "enable swap (swapon)",
+    "swapoff": "disable swap (swapoff)",
+    "acct": "toggle process accounting (acct)",
+    "settimeofday": "change the system clock (settimeofday)",
+    "clock_settime": "change the system clock (clock_settime)",
+    "adjtimex": "tune the system clock (adjtimex)",
+    "clock_adjtime": "tune the system clock (clock_adjtime)",
+    "iopl": "raise I/O privilege level (iopl)",
+    "ioperm": "grant itself I/O port access (ioperm)",
+    "quotactl": "manipulate disk quotas (quotactl)",
+    "quotactl_fd": "manipulate disk quotas (quotactl_fd)",
+    "pidfd_getfd": "steal a file descriptor from another process (pidfd_getfd)",
+}
 
 # Parked and judged on arguments.
 NOTIFY_NAMES = (
@@ -122,7 +211,7 @@ NOTIFY_NAMES = (
     "unlink", "unlinkat", "rename", "renameat", "renameat2",
     "memfd_create",
     "clone", "clone3", "fork", "vfork",
-)
+) + ESCAPE_NAMES
 
 # The residual allow-set, written out explicitly. The strict profile enforces
 # exactly this (plus NOTIFY, minus HARD_DENY); the default profile allows
@@ -176,9 +265,21 @@ def _nrs(names) -> list[int]:
     return out
 
 
-HARD_DENY = _nrs(HARD_DENY_NAMES)
+# HARD_DENY keeps its name (runner/tests/filter build against it) but now holds
+# only the in-kernel bypass vectors; the escape syscalls live in NOTIFY.
+HARD_DENY = _nrs(BYPASS_DENY_NAMES)
+ESCAPE = _nrs(ESCAPE_NAMES)
 NOTIFY = _nrs(NOTIFY_NAMES)
 BASELINE_ALLOW = _nrs(BASELINE_ALLOW_NAMES)
+
+# Reverse map: syscall number -> name, for building escape violation summaries.
+_ESCAPE_NR_TO_NAME = {}
+for _n in ESCAPE_NAMES:
+    try:
+        _ESCAPE_NR_TO_NAME[nr(_n)] = _n
+    except KeyError:
+        continue
+ESCAPE_SET = frozenset(_ESCAPE_NR_TO_NAME)
 
 
 # ---------------------------------------------------------- path policy
@@ -196,8 +297,14 @@ DEFAULT_READ_PREFIXES = (
     "/bin", "/sbin", "/opt", "/etc", "/run/systemd/resolve",
     "/dev/null", "/dev/zero", "/dev/full", "/dev/urandom", "/dev/random",
     "/dev/tty", "/dev/pts", "/dev/stdin", "/dev/stdout", "/dev/stderr",
-    "/proc/self", "/proc/meminfo", "/proc/cpuinfo", "/proc/stat",
-    "/proc/filesystems", "/proc/sys/vm/overcommit_memory", "/proc/sys/kernel",
+    # All of /proc is readable. The sandbox has its own PID + mount namespaces,
+    # so /proc only exposes the sandbox's OWN processes -- not the host's -- and
+    # different interpreters legitimately read different /proc files at startup
+    # (Python 3.14, for instance, reads /proc/<pid>/maps; 3.12 does not). Making
+    # this version-dependent read a policy decision produced the same file
+    # getting two different verdicts on two machines. The genuinely dangerous
+    # /proc targets (/proc/*/mem, /proc/kcore) are still denied by pattern below.
+    "/proc",
     "/sys/devices/system/cpu", "/sys/fs/cgroup",
 )
 
@@ -230,9 +337,12 @@ SENSITIVE_PATTERNS: tuple[tuple[str, str], ...] = (
     ("*/cookies.sqlite*", "browser session cookies"),
     ("*/logins.json", "browser saved passwords"),
     ("*wallet*.dat", "cryptocurrency wallet"),
-    ("/proc/*/mem", "another process's memory"),
-    ("/proc/*/environ", "another process's environment"),
-    ("/proc/*/cmdline", "another process's command line"),
+    # Note: /proc/*/environ and /proc/*/cmdline are intentionally NOT flagged.
+    # In the sandbox's own PID namespace they only reveal the sandboxed
+    # process's own environment/args, not the host's, and some interpreters read
+    # their own at startup -- flagging them caused version-dependent false
+    # positives. Reading another process's raw *memory* is still refused.
+    ("/proc/*/mem", "process memory"),
     ("/proc/kcore", "kernel memory image"),
     ("/dev/mem", "physical memory"),
     ("/dev/kmem", "kernel memory"),
@@ -355,10 +465,25 @@ class Policy:
         `reader(index, size)` fetches `size` bytes from the target's memory at
         `args[index]`, TOCTOU-checked, returning None if it cannot be trusted.
         """
+        # Escape/tamper syscalls are parked and turned into a visible,
+        # freezing violation rather than refused silently in-kernel. The
+        # syscall never runs -- the notification is left unanswered, which
+        # blocks it in the kernel -- so the escape is prevented AND seen.
+        if nr_ in ESCAPE_SET:
+            return self._judge_escape(nr_)
         handler = self._handlers().get(nr_)
         if handler is None:
             return _allow("unclassified", f"{nr_} permitted by default")
         return handler(args, reader)
+
+    def _judge_escape(self, nr_: int) -> Verdict:
+        name = _ESCAPE_NR_TO_NAME.get(nr_, str(nr_))
+        label = ESCAPE_LABELS.get(name, f"a sandbox-escape syscall ({name})")
+        return _violation(
+            f"escape.{name}",
+            f"attempted to {label}",
+            syscall=name,
+        )
 
     def _handlers(self):
         if getattr(self, "_h", None) is None:

@@ -80,15 +80,17 @@ to **host**, press **Run**.
 
 Banner: *attempted outbound connection to 93.184.216.34:443*.
 
-### Beat 4 — "And the classic escapes just bounce." (15s)
+### Beat 4 — "And the classic escapes don't even get to run." (15s)
 
 Select **`escape_attempt.py`**, Policy back to **strict**, press **Run**.
 
 > "Finally, the greatest hits of container escapes — `ptrace`, `mount`,
-> `unshare`, loading an eBPF program, a kernel module. Every one refused in the
-> kernel with `EPERM`, no userspace round-trip needed. Two tiers: cheap
-> deterministic blocks for calls that are never legitimate, argument-level
-> judgement for the rest."
+> `unshare`, loading an eBPF program, a kernel module. It tries to attach a
+> debugger on line one, and that's as far as it gets: **VIOLATION**, the panel
+> freezes, *attempted to attach a debugger (ptrace)*. The escape never runs, and
+> it's flagged as malicious — not swept under the rug. The one tier below this,
+> reserved for pure monitor-bypass tricks like io_uring, is refused straight in
+> the kernel; everything else is judged on its arguments."
 
 ## If asked "how is this different from Falco / Firejail?"
 

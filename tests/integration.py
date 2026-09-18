@@ -50,12 +50,16 @@ def main():
     if fv.get("response_us"):
         print(f"       detect->freeze latency: {fv['response_us']:.1f} us")
 
-    print("== escape_attempt (villain #3, hard-deny, runs to completion) ==")
+    print("== escape_attempt (villain #3, must be CONTAINED) ==")
     r = _run("escape_attempt.py")
-    # Every escape is refused in-kernel with EPERM; the payload itself keeps
-    # running and exits cleanly, so from the monitor's view there are no
-    # user-notif violations — the filter never forwarded those calls.
-    ok &= check("completed", r.exit_code == 0, f"(got {r.exit_code}, verdict {r.verdict})")
+    # Escape-class syscalls are parked and judged as violations: the first one
+    # (ptrace) freezes the sandbox before it runs, so the payload never reaches
+    # its later escape attempts and the verdict is contained.
+    ok &= check("verdict is contained", r.verdict == "contained", f"(got {r.verdict})")
+    ok &= check("froze the process", r.frozen)
+    ok &= check("first violation is an escape",
+                (r.first_violation or {}).get("rule", "").startswith("escape."),
+                f"(rule={(r.first_violation or {}).get('rule')})")
 
     print("== fork_bomb_lite (villain #2, caught as fork-bomb behaviour) ==")
     r = _run("fork_bomb_lite.py", timeout=15)
