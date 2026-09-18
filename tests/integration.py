@@ -57,18 +57,12 @@ def main():
     # user-notif violations — the filter never forwarded those calls.
     ok &= check("completed", r.exit_code == 0, f"(got {r.exit_code}, verdict {r.verdict})")
 
-<<<<<<< HEAD
     print("== fork_bomb_lite (villain #2, caught as fork-bomb behaviour) ==")
     r = _run("fork_bomb_lite.py", timeout=15)
     ok &= check("contained", r.verdict == "contained", f"(got {r.verdict})")
     ok &= check("flagged as fork bomb",
                 (r.first_violation or {}).get("rule") == "process.fork_bomb",
                 f"(rule={(r.first_violation or {}).get('rule')})")
-=======
-    print("== fork_bomb_lite (villain #2, contained by pids cap) ==")
-    r = _run("fork_bomb_lite.py", timeout=15)
-    ok &= check("did not hang / crash host", r.exit_code is not None)
->>>>>>> 0cb50cc192b421946859b139e4e717e50e53c739
 
     print()
     print("ALL PASS" if ok else "SOME FAILURES")

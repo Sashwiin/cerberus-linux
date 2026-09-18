@@ -192,7 +192,6 @@ payloads/      four villains and one benign control
 tests/         smoke test (seccomp) + full integration suite
 ```
 
-<<<<<<< HEAD
 ## Hardening
 
 Cerberus has had a hardening pass that closes real evasion bypasses — symlink and
@@ -201,8 +200,6 @@ retention, and more. Each is verified by `tests/hardening.py`. See
 [`HARDENING.md`](HARDENING.md) for the full table and the roadmap to a
 VM-grade boundary ([`packaging/run_in_vm.md`](packaging/run_in_vm.md)).
 
-=======
->>>>>>> 0cb50cc192b421946859b139e4e717e50e53c739
 ## Honest limitations
 
 - A ptrace/namespace sandbox is **not** a hardened boundary against a

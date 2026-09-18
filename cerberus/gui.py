@@ -63,14 +63,12 @@ class CerberusGUI:
         self.running = False
         self.seen = self.allowed = self.watched = self.viol = 0
         self.first_violation_shown = False
-<<<<<<< HEAD
         # disposable-VM mode state
         self.run_in_vm = tk.BooleanVar(value=False)
         self._vm = None
         self._vm_port = 8799
         self.vm_image = "ubuntu"
-=======
->>>>>>> 0cb50cc192b421946859b139e4e717e50e53c739
+        self._vm_phase = "off"  # off | booting | live
 
         root.title("Cerberus")
         root.configure(bg=BG)
@@ -84,9 +82,22 @@ class CerberusGUI:
         self._build_main(body)
 
         self._set_state("idle", "idle", "open a script to check it")
+        self._refresh_badge()
         self.root.after(60, self._drain_queue)
-<<<<<<< HEAD
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _refresh_badge(self) -> None:
+        """Always-visible indicator of where runs execute and VM status."""
+        if not self.run_in_vm.get():
+            text, fg, border = "◈ LOCAL SANDBOX", INFO, INFO
+        elif self._vm_phase == "live":
+            text, fg, border = "▣ DISPOSABLE VM · LIVE", OK, OK
+        elif self._vm_phase == "booting":
+            text, fg, border = "▣ DISPOSABLE VM · BOOTING…", WARN, WARN
+        else:
+            text, fg, border = "▣ DISPOSABLE VM · off (boots on run)", DIM, LINE
+        self.badge.config(text=text, fg=fg, highlightbackground=border,
+                          highlightcolor=border)
 
     def _on_close(self) -> None:
         vm = self._vm
@@ -95,9 +106,9 @@ class CerberusGUI:
                 vm.stop()  # terminate QEMU and delete the disposable overlay
             except Exception:
                 pass
+        self._vm = None
+        self._vm_phase = "off"
         self.root.destroy()
-=======
->>>>>>> 0cb50cc192b421946859b139e4e717e50e53c739
 
     # ------------------------------------------------------------- layout
 
@@ -117,6 +128,13 @@ class CerberusGUI:
                  font=("DejaVu Sans", 15, "bold")).place(x=70, y=10)
         tk.Label(h, text="ephemeral sandbox · real-time syscall defense",
                  bg=PANEL2, fg=DIM, font=("DejaVu Sans", 9)).place(x=70, y=36)
+
+        # Persistent execution-mode badge (always visible, top-right): tells you
+        # at a glance where runs execute — local sandbox, or the disposable VM
+        # and whether it's booting / live.
+        self.badge = tk.Label(h, text="", bg=PANEL, fg=INK, font=("DejaVu Sans", 10, "bold"),
+                              padx=12, pady=5, highlightthickness=1)
+        self.badge.place(relx=1.0, x=-18, y=16, anchor="ne")
 
     def _build_sidebar(self, parent: tk.Frame) -> None:
         s = tk.Frame(parent, bg=PANEL2, width=290)
@@ -151,12 +169,12 @@ class CerberusGUI:
         self.net = tk.StringVar(value="none")
         self._combo(s, self.net, ["none", "host"])
 
-<<<<<<< HEAD
         # disposable-VM toggle: run two boundaries deep, still in this window
         vmf = tk.Frame(s, bg=PANEL2)
         vmf.pack(fill="x", padx=18, pady=(16, 0))
         cb = tk.Checkbutton(
             vmf, text=" Run in disposable VM", variable=self.run_in_vm,
+            command=self._refresh_badge,
             bg=PANEL2, fg=INK, selectcolor=PANEL, activebackground=PANEL2,
             activeforeground=INK, font=SANS, bd=0, highlightthickness=0,
             anchor="w")
@@ -165,8 +183,6 @@ class CerberusGUI:
                  bg=PANEL2, fg=FAINT, font=("DejaVu Sans", 8),
                  wraplength=250, justify="left").pack(anchor="w")
 
-=======
->>>>>>> 0cb50cc192b421946859b139e4e717e50e53c739
         label("OR TRY A BUNDLED SAMPLE")
         self.sample = tk.StringVar()
         samples = [f for f in sorted(os.listdir(PAYLOAD_DIR))
@@ -269,6 +285,8 @@ class CerberusGUI:
         self.feed.tag_config("violation", foreground=BAD)
         self.feed.tag_config("dim", foreground=FAINT)
         self.feed.tag_config("ink", foreground=INK)
+        self.feed.tag_config("vmtag", foreground=ACCENT)
+        self.feed.tag_config("vmline", foreground=DIM)
 
     # ------------------------------------------------------------- actions
 
@@ -310,7 +328,6 @@ class CerberusGUI:
     def _start_run(self, name: str, interp: str, data: bytes) -> None:
         self._reset_run()
         self.running = True
-<<<<<<< HEAD
         in_vm = bool(self.run_in_vm.get())
         where = "in disposable VM" if in_vm else "under monitor"
         self._set_state("running", "running", f"{name} — executing {where}")
@@ -322,27 +339,38 @@ class CerberusGUI:
 
     def _worker_vm(self, name: str, interp: str, data: bytes) -> None:
         """Run inside a disposable VM: boot it (once), then stream events over
-        the forwarded port into the same native widgets. No browser involved."""
+        the forwarded port into the same native widgets. No browser involved.
+
+        Progress (download %, boot stages) and the VM's live serial console are
+        streamed into the window so you can see exactly what is happening."""
         from . import vm as vmmod
         from . import wsclient
         host, port = "127.0.0.1", self._vm_port
 
+        def status(msg):
+            self.q.put({"kind": "vm_status", "summary": msg})
+
         try:
             if self._vm is None or not self._vm.is_running():
-                self.q.put({"kind": "lifecycle", "severity": "info", "ts": None,
-                            "summary": "booting disposable VM (first run downloads "
-                                       "a small image; ~20–60s)…"})
-                self._vm = vmmod.spawn_vm(port=port, image=self.vm_image)
-                if not wsclient.wait_up(host, port, timeout=180):
+                self.q.put({"kind": "vm_phase", "phase": "booting"})
+                status("preparing disposable VM…")
+                self._vm = vmmod.spawn_vm(port=port, image=self.vm_image,
+                                          progress=status)
+                # stream the VM's serial console (kernel + cloud-init) live
+                self._start_console_reader(self._vm)
+                status("waiting for the VM to finish booting…")
+                if not wsclient.wait_up(host, port, timeout=240):
+                    self.q.put({"kind": "vm_phase", "phase": "off"})
                     self.q.put({"kind": "error",
                                 "summary": "VM booted but the dashboard never came "
-                                           "up; check the VM console"})
+                                           "up — see the vm console lines above"})
                     self.q.put({"kind": "run_end", "detail": {"verdict": "error"}})
                     return
-                self.q.put({"kind": "lifecycle", "severity": "info", "ts": None,
-                            "summary": "VM up — sandbox now runs two boundaries deep"})
+                self.q.put({"kind": "vm_phase", "phase": "live"})
+                status("VM up — sandbox runs two boundaries deep")
+            else:
+                self.q.put({"kind": "vm_phase", "phase": "live"})
 
-            # open the event stream first so we don't miss early events
             events = wsclient.WSEvents(host, port)
             events.connect()
             wsclient.upload(host, port, name, data,
@@ -355,13 +383,18 @@ class CerberusGUI:
         except Exception as exc:
             self.q.put({"kind": "error", "summary": f"VM run failed: {exc}"})
             self.q.put({"kind": "run_end", "detail": {"verdict": "error"}})
-=======
-        self._set_state("running", "running",
-                        f"{name} — executing under monitor")
-        self.meta.config(text=f"{name} · {len(data)} bytes · uid 65534")
-        threading.Thread(target=self._worker,
-                         args=(name, interp, data), daemon=True).start()
->>>>>>> 0cb50cc192b421946859b139e4e717e50e53c739
+
+    def _start_console_reader(self, vm) -> None:
+        """Pump the VM's serial console into the feed as dim 'vm' lines."""
+        def reader():
+            try:
+                for line in vm.proc.stdout:
+                    line = line.rstrip("\n")
+                    if line.strip():
+                        self.q.put({"kind": "vm_console", "summary": line})
+            except Exception:
+                pass
+        threading.Thread(target=reader, daemon=True).start()
 
     def _worker(self, name: str, interp: str, data: bytes) -> None:
         """Spawn the elevated helper and read its JSON event stream."""
@@ -438,33 +471,30 @@ class CerberusGUI:
             self._set_state("frozen", "FROZEN", "process group stopped mid-syscall")
         elif kind in ("lifecycle", "state"):
             self._append_feed(ev)
-<<<<<<< HEAD
         elif kind == "run_start":
             # emitted by the in-VM web server; the local helper doesn't send it
             pass
+        elif kind == "vm_phase":
+            self._vm_phase = ev.get("phase", "off")
+            self._refresh_badge()
+        elif kind == "vm_status":
+            # headline VM phase shown in the state pill sub-text
+            self.state_sub.config(text=ev.get("summary", ""))
+        elif kind == "vm_console":
+            self._append_console(ev.get("summary", ""))
         elif kind == "error":
             self._show_error(ev.get("summary", "error"))
         elif kind in ("result", "run_end"):
-=======
-        elif kind == "error":
-            self._show_error(ev.get("summary", "error"))
-        elif kind == "result":
->>>>>>> 0cb50cc192b421946859b139e4e717e50e53c739
             self._finish(ev)
 
     def _finish(self, ev: dict) -> None:
         self.running = False
-<<<<<<< HEAD
         # local helper puts the verdict/stats at the top level ("result");
         # the in-VM web server nests them under "detail" ("run_end").
         src = ev.get("detail") if ev.get("kind") == "run_end" else ev
         src = src or ev
         v = src.get("verdict")
         stats = src.get("stats") or {}
-=======
-        v = ev.get("verdict")
-        stats = ev.get("stats") or {}
->>>>>>> 0cb50cc192b421946859b139e4e717e50e53c739
         if v == "contained":
             self._set_state("frozen", "CONTAINED", "payload stopped before it could act")
         elif v == "clean":
@@ -474,6 +504,7 @@ class CerberusGUI:
         meta = f"{stats.get('notifications', 0)} syscalls inspected"
         if stats.get("decide_us_p50") is not None:
             meta += f" · median decide {stats['decide_us_p50']}µs"
+        meta += " · in disposable VM" if self.run_in_vm.get() else " · local sandbox"
         self.meta.config(text=meta)
 
     # ------------------------------------------------------------- painting
@@ -514,6 +545,16 @@ class CerberusGUI:
         # cap lines
         if int(self.feed.index("end-1c").split(".")[0]) > 800:
             self.feed.delete("1.0", "200.0")
+        self.feed.see("end")
+        self.feed.config(state="disabled")
+
+    def _append_console(self, line: str) -> None:
+        """Append a live VM serial-console line (dim, prefixed 'vm')."""
+        self.feed.config(state="normal")
+        self.feed.insert("end", "vm ", "vmtag")
+        self.feed.insert("end", f"│ {line}\n", "vmline")
+        if int(self.feed.index("end-1c").split(".")[0]) > 1200:
+            self.feed.delete("1.0", "300.0")
         self.feed.see("end")
         self.feed.config(state="disabled")
 

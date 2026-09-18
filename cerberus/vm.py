@@ -269,21 +269,29 @@ def _seed_iso(user_data: bytes, meta_data: bytes) -> bytes:
 # ----------------------------------------------------------------- image mgmt
 
 
-def ensure_base(distro: str) -> Path:
+def ensure_base(distro: str, progress=None) -> Path:
+    """Return the cached base image, downloading it once.
+
+    `progress(msg)` (optional) is called with human-readable status so a GUI can
+    show download percentage instead of a frozen "please wait".
+    """
     if distro not in IMAGES:
         die(f"unknown image '{distro}'; choose from {', '.join(IMAGES)}")
     CACHE.mkdir(parents=True, exist_ok=True)
     dest = CACHE / f"base-{distro}.img"
     if dest.exists() and dest.stat().st_size > 0:
+        if progress:
+            progress(f"using cached {distro} image")
         return dest
     url = IMAGES[distro]["url"]
     log(f"downloading {distro} cloud image (one time)…")
-    log(f"  {url}")
+    if progress:
+        progress(f"downloading {distro} image (one-time, a few hundred MB)…")
     tmp = dest.with_suffix(".part")
     try:
         with urllib.request.urlopen(url) as r, open(tmp, "wb") as f:
             total = int(r.headers.get("Content-Length", 0))
-            got = 0
+            got = last_pct = 0
             while True:
                 chunk = r.read(1 << 20)
                 if not chunk:
@@ -294,6 +302,11 @@ def ensure_base(distro: str) -> Path:
                     pct = 100 * got // total
                     print(f"\r  {pct:3d}%  {got >> 20} / {total >> 20} MiB",
                           end="", file=sys.stderr)
+                    # throttle GUI updates to every ~3%
+                    if progress and pct >= last_pct + 3:
+                        last_pct = pct
+                        progress(f"downloading {distro} image "
+                                 f"{pct}% ({got >> 20}/{total >> 20} MiB)")
         print(file=sys.stderr)
         tmp.rename(dest)
     except Exception as exc:
@@ -363,27 +376,40 @@ class VMHandle:
 
 def spawn_vm(port: int = 8787, image: str = "ubuntu", memory: int = 2048,
              cpus: int = 2, allow_net: bool = False,
-             quiet: bool = True) -> VMHandle:
+             progress=None) -> VMHandle:
     """Boot a disposable VM in the background and return a handle.
 
-    Used by the native GUI's "run in VM" mode. Raises RuntimeError with a clear
-    message if QEMU or the base image can't be prepared, so the GUI can surface
-    it. The returned handle's stop() terminates QEMU and deletes the overlay.
+    Used by the native GUI's "run in VM" mode. `progress(msg)` (optional) reports
+    each stage (download %, overlay, launching QEMU) so the UI shows real
+    activity. The handle's `proc.stdout` is the VM's serial console — the caller
+    can read it line by line to show the live boot. Raises RuntimeError with a
+    clear message if QEMU or the image can't be prepared. `stop()` terminates
+    QEMU and deletes the disposable overlay.
     """
+    def say(m):
+        if progress:
+            progress(m)
+
     qemu = _have("qemu-system-x86_64")
     qimg = _have("qemu-img")
     if not qemu or not qimg:
         raise RuntimeError(
             "QEMU not found. Install qemu-system-x86 and qemu-utils "
             "(apt), or @virtualization + qemu-img (dnf).")
-    base = ensure_base(image)
+    base = ensure_base(image, progress=progress)
+    say("creating disposable overlay disk…")
     overlay = make_overlay(base, qimg)
+    say("building cloud-init seed…")
     seed_path = CACHE / f"seed-{os.getpid()}-{port}.iso"
     seed_path.write_bytes(build_seed(port))
     argv = qemu_argv(qemu, overlay, seed_path, port, memory, cpus, allow_net)
+    say("launching QEMU " + ("(KVM)" if _kvm_ok() else "(TCG, no KVM — slower)")
+        + " …")
 
-    out = subprocess.DEVNULL if quiet else None
-    proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=out, stderr=out)
+    # Capture the serial console so the GUI can show the live boot.
+    proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL,
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            bufsize=1, text=True, errors="replace")
 
     def cleanup():
         overlay.unlink(missing_ok=True)
