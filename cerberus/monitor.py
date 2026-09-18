@@ -24,13 +24,21 @@ import errno
 import os
 import threading
 import time
+<<<<<<< HEAD
 from collections import Counter, deque
+=======
+from collections import Counter
+>>>>>>> 0cb50cc192b421946859b139e4e717e50e53c739
 from dataclasses import dataclass, field
 
 from . import seccomp
 from .cgroup import Cgroup
 from .events import EventBus
+<<<<<<< HEAD
 from .policy import Action, Policy, Severity, Verdict
+=======
+from .policy import Action, Policy, Severity
+>>>>>>> 0cb50cc192b421946859b139e4e717e50e53c739
 from .syscalls import name as syscall_name
 
 
@@ -124,6 +132,7 @@ class Monitor:
         self.first_violation: dict | None = None
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
+<<<<<<< HEAD
         # Behavioural fork-bomb detection: count process-creation syscalls and
         # trip a violation once they blow past what any sane program needs. This
         # is separate from the cgroup pids cap (which limits *concurrent* procs
@@ -137,6 +146,8 @@ class Monitor:
         self._clone_times: deque[float] = deque()
         self._fork_window = 1.0
         self._fork_burst = min(getattr(policy, "max_processes", 128) // 3 or 1, 40)
+=======
+>>>>>>> 0cb50cc192b421946859b139e4e717e50e53c739
 
     # ------------------------------------------------------------- control
 
@@ -174,13 +185,17 @@ class Monitor:
             if self.state == "running":
                 self.set_state("exited")
 
+<<<<<<< HEAD
     _CLONE_SYSCALLS = ("clone", "clone3", "fork", "vfork")
 
+=======
+>>>>>>> 0cb50cc192b421946859b139e4e717e50e53c739
     def _handle(self, notif) -> None:
         t0 = time.perf_counter()
         sname = syscall_name(notif.nr)
         reader = ArgReader(self.listener, notif.id, notif.pid, notif.args)
 
+<<<<<<< HEAD
         # Fork-bomb behaviour, detected by RATE, not total count. A fork bomb
         # spawns dozens of processes in milliseconds; on a machine whose cgroup
         # pids cap is enforced the payload may only get ~60 spawns off before the
@@ -210,6 +225,8 @@ class Monitor:
                 self._respond_violation(notif, sname, v, t0)
                 return
 
+=======
+>>>>>>> 0cb50cc192b421946859b139e4e717e50e53c739
         try:
             verdict = self.policy.judge(notif.nr, notif.args, reader)
         except Exception as exc:  # a policy bug must not become a sandbox escape

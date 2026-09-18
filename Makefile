@@ -38,9 +38,12 @@ appimage-native: ## build the native-GUI AppImage (run on a host with python3-tk
 
 harden-test:    ## run the hardening regression suite
 	sudo python3 tests/hardening.py
+<<<<<<< HEAD
 
 vm:             ## run Cerberus inside a disposable QEMU VM (needs qemu)
 	python3 -m cerberus.vm run
 
 vm-dry:         ## preview the QEMU command and validate the seed (no boot)
 	python3 -m cerberus.vm run --dry-run
+=======
+>>>>>>> 0cb50cc192b421946859b139e4e717e50e53c739

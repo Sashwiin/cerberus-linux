@@ -342,10 +342,13 @@ class Policy:
     allow_exec: bool = True
     freeze_on_violation: bool = True
     default_allow_unlisted: bool = True
+<<<<<<< HEAD
     # Behavioural fork-bomb threshold: total process-creation syscalls before
     # the monitor trips a violation. Normal programs spawn a handful; a fork
     # bomb blows past this immediately.
     max_processes: int = 128
+=======
+>>>>>>> 0cb50cc192b421946859b139e4e717e50e53c739
 
     # ----------------------------------------------------------- dispatch
 
@@ -683,7 +686,11 @@ PROFILES = {
     # Nothing but compute: no exec, no network, no filesystem beyond /work.
     "paranoid": Policy(
         name="paranoid", allow_network=False, allow_loopback=False,
+<<<<<<< HEAD
         allow_exec=False, default_allow_unlisted=False, max_processes=16,
+=======
+        allow_exec=False, default_allow_unlisted=False,
+>>>>>>> 0cb50cc192b421946859b139e4e717e50e53c739
         read_prefixes=("/work", "/tmp", "/usr", "/lib", "/lib64", "/bin",
                        "/dev/null", "/dev/zero", "/dev/urandom", "/proc/self",
                        "/etc/ld.so.cache", "/etc/localtime"),

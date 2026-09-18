@@ -63,11 +63,14 @@ class CerberusGUI:
         self.running = False
         self.seen = self.allowed = self.watched = self.viol = 0
         self.first_violation_shown = False
+<<<<<<< HEAD
         # disposable-VM mode state
         self.run_in_vm = tk.BooleanVar(value=False)
         self._vm = None
         self._vm_port = 8799
         self.vm_image = "ubuntu"
+=======
+>>>>>>> 0cb50cc192b421946859b139e4e717e50e53c739
 
         root.title("Cerberus")
         root.configure(bg=BG)
@@ -82,6 +85,7 @@ class CerberusGUI:
 
         self._set_state("idle", "idle", "open a script to check it")
         self.root.after(60, self._drain_queue)
+<<<<<<< HEAD
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _on_close(self) -> None:
@@ -92,6 +96,8 @@ class CerberusGUI:
             except Exception:
                 pass
         self.root.destroy()
+=======
+>>>>>>> 0cb50cc192b421946859b139e4e717e50e53c739
 
     # ------------------------------------------------------------- layout
 
@@ -145,6 +151,7 @@ class CerberusGUI:
         self.net = tk.StringVar(value="none")
         self._combo(s, self.net, ["none", "host"])
 
+<<<<<<< HEAD
         # disposable-VM toggle: run two boundaries deep, still in this window
         vmf = tk.Frame(s, bg=PANEL2)
         vmf.pack(fill="x", padx=18, pady=(16, 0))
@@ -158,6 +165,8 @@ class CerberusGUI:
                  bg=PANEL2, fg=FAINT, font=("DejaVu Sans", 8),
                  wraplength=250, justify="left").pack(anchor="w")
 
+=======
+>>>>>>> 0cb50cc192b421946859b139e4e717e50e53c739
         label("OR TRY A BUNDLED SAMPLE")
         self.sample = tk.StringVar()
         samples = [f for f in sorted(os.listdir(PAYLOAD_DIR))
@@ -301,6 +310,7 @@ class CerberusGUI:
     def _start_run(self, name: str, interp: str, data: bytes) -> None:
         self._reset_run()
         self.running = True
+<<<<<<< HEAD
         in_vm = bool(self.run_in_vm.get())
         where = "in disposable VM" if in_vm else "under monitor"
         self._set_state("running", "running", f"{name} — executing {where}")
@@ -345,6 +355,13 @@ class CerberusGUI:
         except Exception as exc:
             self.q.put({"kind": "error", "summary": f"VM run failed: {exc}"})
             self.q.put({"kind": "run_end", "detail": {"verdict": "error"}})
+=======
+        self._set_state("running", "running",
+                        f"{name} — executing under monitor")
+        self.meta.config(text=f"{name} · {len(data)} bytes · uid 65534")
+        threading.Thread(target=self._worker,
+                         args=(name, interp, data), daemon=True).start()
+>>>>>>> 0cb50cc192b421946859b139e4e717e50e53c739
 
     def _worker(self, name: str, interp: str, data: bytes) -> None:
         """Spawn the elevated helper and read its JSON event stream."""
@@ -421,22 +438,33 @@ class CerberusGUI:
             self._set_state("frozen", "FROZEN", "process group stopped mid-syscall")
         elif kind in ("lifecycle", "state"):
             self._append_feed(ev)
+<<<<<<< HEAD
         elif kind == "run_start":
             # emitted by the in-VM web server; the local helper doesn't send it
             pass
         elif kind == "error":
             self._show_error(ev.get("summary", "error"))
         elif kind in ("result", "run_end"):
+=======
+        elif kind == "error":
+            self._show_error(ev.get("summary", "error"))
+        elif kind == "result":
+>>>>>>> 0cb50cc192b421946859b139e4e717e50e53c739
             self._finish(ev)
 
     def _finish(self, ev: dict) -> None:
         self.running = False
+<<<<<<< HEAD
         # local helper puts the verdict/stats at the top level ("result");
         # the in-VM web server nests them under "detail" ("run_end").
         src = ev.get("detail") if ev.get("kind") == "run_end" else ev
         src = src or ev
         v = src.get("verdict")
         stats = src.get("stats") or {}
+=======
+        v = ev.get("verdict")
+        stats = ev.get("stats") or {}
+>>>>>>> 0cb50cc192b421946859b139e4e717e50e53c739
         if v == "contained":
             self._set_state("frozen", "CONTAINED", "payload stopped before it could act")
         elif v == "clean":

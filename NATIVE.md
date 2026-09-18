@@ -37,6 +37,7 @@ Nothing about the UI runs as root, and nothing touches the network.
         └──────── JSON events on stdout ─────────┘ freezes on violation
 ```
 
+<<<<<<< HEAD
 
 ## Run inside a disposable VM — still in the native window
 
@@ -50,6 +51,8 @@ deleted) when you close the window.
 Under the hood the window becomes a native client of the sandbox server running
 inside the VM, streaming syscall events back over one forwarded port.
 
+=======
+>>>>>>> 0cb50cc192b421946859b139e4e717e50e53c739
 ## Package it as a single-file native app
 
 To ship one self-contained file that opens the native window with **nothing**
