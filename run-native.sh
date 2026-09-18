@@ -6,12 +6,13 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
-# Tkinter ships with CPython but some distros split it into a package.
-if ! python3 -c 'import tkinter' 2>/dev/null; then
-  echo "Cerberus needs Tkinter (python3-tk). Install it:"
-  echo "  Debian/Ubuntu/Mint : sudo apt install python3-tk"
-  echo "  Fedora             : sudo dnf install python3-tkinter"
-  echo "  Arch               : sudo pacman -S tk"
+export QTWEBENGINE_CHROMIUM_FLAGS="--no-sandbox"
+
+# Cerberus uses PySide6 for the modern clinical Stitch UI, falling back to Tkinter.
+if ! python3 -c 'import PySide6' 2>/dev/null && ! python3 -c 'import tkinter' 2>/dev/null; then
+  echo "Cerberus needs PySide6 or Tkinter. Install it:"
+  echo "  pip install PySide6"
+  echo "  or: sudo apt install python3-tk"
   exit 1
 fi
 

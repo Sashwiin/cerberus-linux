@@ -153,11 +153,10 @@ Initial working build for VinHack 2026 (Trust, Safety & Digital Security).
 - Dependency-free **web dashboard** (HTTP + WebSocket), CLI, four villain
   payloads and a benign control, smoke + integration tests.
 
-<!-- Replace <REPO> with your GitHub URL, e.g. https://github.com/you/cerberus -->
-[Unreleased]: https://github.com/<REPO>/compare/v0.6.0...HEAD
-[0.6.0]: https://github.com/<REPO>/releases/tag/v0.6.0
-[0.5.0]: https://github.com/<REPO>/releases/tag/v0.5.0
-[0.4.0]: https://github.com/<REPO>/releases/tag/v0.4.0
-[0.3.0]: https://github.com/<REPO>/releases/tag/v0.3.0
-[0.2.0]: https://github.com/<REPO>/releases/tag/v0.2.0
-[0.1.0]: https://github.com/<REPO>/releases/tag/v0.1.0
+[Unreleased]: https://github.com/Sashwiin/cerberus-linux/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/Sashwiin/cerberus-linux/releases/tag/v0.6.0
+[0.5.0]: https://github.com/Sashwiin/cerberus-linux/releases/tag/v0.5.0
+[0.4.0]: https://github.com/Sashwiin/cerberus-linux/releases/tag/v0.4.0
+[0.3.0]: https://github.com/Sashwiin/cerberus-linux/releases/tag/v0.3.0
+[0.2.0]: https://github.com/Sashwiin/cerberus-linux/releases/tag/v0.2.0
+[0.1.0]: https://github.com/Sashwiin/cerberus-linux/releases/tag/v0.1.0

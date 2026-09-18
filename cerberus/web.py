@@ -21,6 +21,7 @@ import os
 import queue
 import socket
 import struct
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -80,6 +81,10 @@ class DashboardState:
         self.session_summary: dict | None = None
         self._rate: dict[str, list[float]] = {}
         self._rate_lock = threading.Lock()
+        self._vm = None
+        self._vm_phase = "off"  # off | booting | live
+        self._vm_port = 8799
+        self.vm_image = "ubuntu"
 
     # --------------------------------------------------------- validation
 
@@ -160,7 +165,7 @@ class DashboardState:
             out.append({"name": fn, "summary": doc})
         return out
 
-    def run_sample(self, payload: str, policy_name: str, net: str) -> None:
+    def run_sample(self, payload: str, policy_name: str, net: str, in_vm: bool = False) -> None:
         """Run one of the bundled demo payloads by name."""
         path = os.path.join(PAYLOAD_DIR, os.path.basename(payload))
         if not os.path.isfile(path):
@@ -169,15 +174,33 @@ class DashboardState:
         with open(path, "rb") as fh:
             data = fh.read()
         self.run_session(os.path.basename(payload), data, ["python3"],
-                         policy_name, net, source="sample")
+                         policy_name, net, source="sample", in_vm=in_vm)
 
     def run_session(self, filename: str, data: bytes, interp: list[str],
-                    policy_name: str, net: str, source: str = "upload") -> None:
+                    policy_name: str, net: str, source: str = "upload",
+                    in_vm: bool = False) -> None:
         if self.running:
             self.broadcast({"kind": "error",
                             "summary": "a session is already running"})
             return
         self.running = True
+
+        if in_vm:
+            threading.Thread(
+                target=self._worker_vm,
+                args=(filename, interp, data, policy_name, net),
+                daemon=True,
+            ).start()
+            return
+
+        if os.geteuid() != 0:
+            interp_cmd = interp[0] if interp else "python3"
+            threading.Thread(
+                target=self._worker_helper,
+                args=(filename, interp_cmd, data, policy_name, net, source),
+                daemon=True,
+            ).start()
+            return
 
         bus = EventBus(history=1000)
         q = bus.subscribe()
@@ -227,6 +250,149 @@ class DashboardState:
             stop.set()
             self.running = False
 
+    def _worker_helper(self, name: str, interp: str, data: bytes, policy_name: str, net: str, source: str = "upload") -> None:
+        """Spawn the elevated helper (via pkexec or sudo) to execute with root privileges."""
+        import subprocess, shutil
+        pybin = sys.executable or "python3"
+        helper = [pybin, "-B", "-m", "cerberus.helper", "--policy", policy_name,
+                  "--net", net, "--name", name, "--interp", interp,
+                  "--b64"]
+        env = dict(os.environ)
+        env["PYTHONPATH"] = os.path.dirname(HERE) + os.pathsep + env.get("PYTHONPATH", "")
+
+        if os.geteuid() == 0:
+            cmd = helper
+        elif shutil.which("pkexec") and (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+            cmd = ["pkexec", "env", f"PYTHONPATH={env['PYTHONPATH']}", *helper]
+        elif shutil.which("sudo"):
+            cmd = ["sudo", "-E", *helper]
+        else:
+            self.broadcast({"kind": "error", "summary": "need root: no pkexec or sudo found"})
+            self.broadcast({"kind": "run_end", "detail": {"verdict": "error"}})
+            self.running = False
+            return
+
+        self.broadcast({"kind": "run_start",
+                        "summary": f"launching {name} ({source})",
+                        "detail": {"policy": policy_name, "net": net,
+                                   "filename": name, "source": source,
+                                   "bytes": len(data), "uid": "65534 (unprivileged)"}})
+
+        try:
+            proc = subprocess.Popen(cmd, stdin=subprocess.PIPE,
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                    env=env)
+        except OSError as e:
+            self.broadcast({"kind": "error", "summary": f"failed to launch helper: {e}"})
+            self.broadcast({"kind": "run_end", "detail": {"verdict": "error"}})
+            self.running = False
+            return
+
+        proc.stdin.write(base64.b64encode(data))
+        proc.stdin.close()
+
+        first_violation = None
+        for line in proc.stdout:
+            try:
+                ev = json.loads(line)
+            except ValueError:
+                continue
+            if ev.get("kind") == "violation" and not first_violation:
+                first_violation = ev
+            if ev.get("kind") == "result":
+                self.session_summary = {
+                    "verdict": ev.get("verdict"),
+                    "exit_code": ev.get("exit_code"),
+                    "frozen": ev.get("frozen"),
+                    "first_violation": ev.get("first_violation"),
+                    "stats": ev.get("stats", {}),
+                    "duration_s": ev.get("duration_s", 0.0),
+                }
+                self.broadcast({
+                    "kind": "run_end",
+                    "severity": "violation" if ev.get("verdict") == "contained" else "info",
+                    "summary": f"session {ev.get('verdict')}",
+                    "detail": self.session_summary
+                })
+            else:
+                self.broadcast(ev)
+
+        err = proc.stderr.read().decode("utf-8", "replace")
+        proc.wait()
+        if proc.returncode != 0 and not self.session_summary:
+            err_msg = err.strip().split("\n")[-1] if err.strip() else f"helper exited with code {proc.returncode}"
+            self.broadcast({"kind": "error", "summary": err_msg})
+            self.broadcast({"kind": "run_end", "detail": {"verdict": "error"}})
+
+        self.running = False
+
+    def _worker_vm(self, name: str, interp: list[str], data: bytes, policy_name: str, net: str) -> None:
+        """Boot disposable VM (once) and stream execution events back to browser."""
+        from . import vm as vmmod
+        from . import wsclient
+        host, port = "127.0.0.1", self._vm_port
+
+        def status(msg: str):
+            self.broadcast({"kind": "vm_status", "summary": msg})
+
+        self.broadcast({"kind": "run_start",
+                        "summary": f"launching {name} (in disposable VM)",
+                        "detail": {"policy": policy_name, "net": net,
+                                   "filename": name, "source": "vm",
+                                   "bytes": len(data), "uid": "65534 (VM isolated)"}})
+        try:
+            if self._vm is None or not self._vm.is_running():
+                self._vm_phase = "booting"
+                self.broadcast({"kind": "vm_phase", "phase": "booting"})
+                status("preparing disposable VM…")
+                self._vm = vmmod.spawn_vm(port=port, image=self.vm_image, progress=status)
+                self._start_console_reader(self._vm)
+                status("waiting for the VM to finish booting…")
+                if not wsclient.wait_up(host, port, timeout=240):
+                    self._vm_phase = "off"
+                    self.broadcast({"kind": "vm_phase", "phase": "off"})
+                    self.broadcast({"kind": "error", "summary": "VM booted but dashboard never came up"})
+                    self.broadcast({"kind": "run_end", "detail": {"verdict": "error"}})
+                    return
+                self._vm_phase = "live"
+                self.broadcast({"kind": "vm_phase", "phase": "live"})
+                status("VM up — sandbox runs two boundaries deep")
+            else:
+                self._vm_phase = "live"
+                self.broadcast({"kind": "vm_phase", "phase": "live"})
+
+            events = wsclient.WSEvents(host, port)
+            events.connect()
+            wsclient.upload(host, port, name, data, policy=policy_name, net=net)
+            for ev in events.stream():
+                self.broadcast(ev)
+        except Exception as exc:
+            self.broadcast({"kind": "error", "summary": f"VM run failed: {exc}"})
+            self.broadcast({"kind": "run_end", "detail": {"verdict": "error"}})
+        finally:
+            self.running = False
+
+    def _start_console_reader(self, vm) -> None:
+        def reader():
+            try:
+                for line in vm.proc.stdout:
+                    line = line.rstrip("\n")
+                    if line.strip():
+                        self.broadcast({"kind": "vm_console", "summary": line})
+            except Exception:
+                pass
+        threading.Thread(target=reader, daemon=True).start()
+
+    def stop_vm(self) -> None:
+        vm = self._vm
+        if vm is not None and vm.is_running():
+            try:
+                vm.stop()
+            except Exception:
+                pass
+        self._vm = None
+        self._vm_phase = "off"
+
 
 def make_handler(state: DashboardState):
     class Handler(BaseHTTPRequestHandler):
@@ -246,6 +412,12 @@ def make_handler(state: DashboardState):
             if self.path == "/" or self.path == "/index.html":
                 with open(os.path.join(HERE, "..", "static", "index.html"), "rb") as fh:
                     self._send(200, fh.read(), "text/html; charset=utf-8")
+            elif self.path == "/api/status":
+                self._send(200, json.dumps({
+                    "running": state.running,
+                    "vm_phase": state._vm_phase,
+                    "vm_port": state._vm_port,
+                }).encode())
             elif self.path == "/api/payloads":
                 self._send(200, json.dumps({
                     "payloads": state.list_payloads(),
@@ -272,11 +444,12 @@ def make_handler(state: DashboardState):
                 payload = body.get("payload", "exfil_credentials.py")
                 policy = body.get("policy", "strict")
                 net = body.get("net", "none")
+                in_vm = bool(body.get("vm", False))
                 if state.running:
                     self._send(409, b'{"error":"a session is already running"}')
                     return
                 threading.Thread(
-                    target=state.run_sample, args=(payload, policy, net),
+                    target=state.run_sample, args=(payload, policy, net, in_vm),
                     daemon=True,
                 ).start()
                 self._send(200, b'{"status":"started"}')
@@ -316,6 +489,7 @@ def make_handler(state: DashboardState):
             q = parse_qs(urlparse(self.path).query)
             policy = (q.get("policy") or ["strict"])[0]
             net = (q.get("net") or ["none"])[0]
+            in_vm = (q.get("vm") or ["0"])[0] in ("1", "true", "True")
             filename = self.headers.get("X-Filename", "upload.py")
 
             ok, msg, interp = state.validate_upload(filename, data)
@@ -325,7 +499,7 @@ def make_handler(state: DashboardState):
 
             threading.Thread(
                 target=state.run_session,
-                args=(msg, data, interp, policy, net, "upload"),
+                args=(msg, data, interp, policy, net, "upload", in_vm),
                 daemon=True,
             ).start()
             self._send(200, json.dumps({"status": "started", "filename": msg,
@@ -379,6 +553,8 @@ def serve(host: str = "127.0.0.1", port: int = 8787) -> None:
         httpd.serve_forever()
     except KeyboardInterrupt:
         print("\nshutting down")
+    finally:
+        state.stop_vm()
 
 
 if __name__ == "__main__":
