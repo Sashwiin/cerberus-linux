@@ -120,6 +120,19 @@ drop any script (`.py .sh .js .rb .pl .lua`, ≤ 256 KiB) onto the page and it r
 feed and a verdict at the end. No command line, no pre-registered payloads. The
 bundled sample villains are still there as a one-click "or try a sample".
 
+The dashboard (`static/index.html`) is a real-time client for the same
+sandbox everything else in this repo uses — no mock data anywhere on the
+page. Three tabs: **Analyze** (the live run, with a CSS-only isometric
+enclave cube and a 6-stage pipeline stepper that track the actual lifecycle
+events the monitor emits), **Timeline & History** (every run this server has
+executed, newest first, with a click-to-expand forensic detail), and
+**Architecture & System** (syscall-tier counts, namespaces, cgroup limits,
+and the policy-profile table, all read live from `cerberus/policy.py` and
+`cerberus/sandbox.py` via `/api/system` — so it can never drift from what the
+monitor actually enforces). A **Manual Kill Process** button reaches into the
+active run's real cgroup and calls the same `cgroup.kill()` the monitor uses
+for teardown.
+
 Upload safety (the upload endpoint is a public attack surface, so it's treated as
 one):
 

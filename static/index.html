@@ -1,1248 +1,940 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-  <title>Cerberus — Runtime Defense</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin=""/>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet"/>
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
-  <style>
-    @layer base {
-      html, body { margin: 0; padding: 0; }
-      body {
-        overscroll-behavior: none;
-        background-image: linear-gradient(to right, rgba(148,163,184,0.08) 1px, transparent 1px),
-                          linear-gradient(to bottom, rgba(148,163,184,0.08) 1px, transparent 1px);
-        background-size: 24px 24px;
-      }
-    }
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: rgba(0,0,0,0.03); }
-    ::-webkit-scrollbar-thumb { background: rgba(112,120,129,0.25); border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: rgba(112,120,129,0.45); }
-    .drop-active {
-      border-color: #006194 !important;
-      background-color: #eaedff !important;
-      box-shadow: 0 0 0 2px #006194;
-    }
-  </style>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: "class",
-      theme: {
-        extend: {
-          colors: {
-            "surface": "#faf8ff",
-            "surface-dim": "#d2d9f4",
-            "surface-bright": "#faf8ff",
-            "surface-container-lowest": "#ffffff",
-            "surface-container-low": "#f2f3ff",
-            "surface-container": "#eaedff",
-            "surface-container-high": "#e2e7ff",
-            "surface-container-highest": "#dae2fd",
-            "on-surface": "#131b2e",
-            "on-surface-variant": "#3f4850",
-            "inverse-surface": "#283044",
-            "inverse-on-surface": "#eef0ff",
-            "outline": "#707881",
-            "outline-variant": "#bfc7d2",
-            "surface-tint": "#006398",
-            "primary": "#006194",
-            "on-primary": "#ffffff",
-            "primary-container": "#007bb9",
-            "on-primary-container": "#fdfcff",
-            "primary-fixed": "#cce5ff",
-            "on-primary-fixed": "#001d31",
-            "secondary": "#4648d4",
-            "on-secondary": "#ffffff",
-            "secondary-container": "#6063ee",
-            "secondary-fixed": "#e1e0ff",
-            "tertiary": "#bb0112",
-            "on-tertiary": "#ffffff",
-            "tertiary-container": "#e02928",
-            "tertiary-fixed": "#ffdad6",
-            "on-tertiary-fixed": "#410002",
-            "error": "#ba1a1a",
-            "on-error": "#ffffff",
-            "error-container": "#ffdad6",
-            "on-error-container": "#93000a",
-            "background": "#faf8ff",
-            "on-background": "#131b2e",
-          },
-          fontFamily: {
-            "display": ["Space Grotesk", "sans-serif"],
-            "headline": ["Space Grotesk", "sans-serif"],
-            "body": ["Inter", "sans-serif"],
-            "mono": ["JetBrains Mono", "monospace"]
-          }
-        }
-      }
-    };
-  </script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cerberus — Runtime Defense</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ---------------------------------------------------------------------
+   Cerberus — Architectural Glassmorphism
+   Real-time dashboard. Every number and state on this page is produced by
+   an actual sandbox run; nothing here is a mock. See cerberus/web.py for
+   the event contract this page renders.
+--------------------------------------------------------------------- */
+:root{
+  --canvas:#f6f8fb; --canvas2:#eef2f6;
+  --glass1:rgba(255,255,255,.75); --glass2:rgba(255,255,255,.88); --glass3:rgba(255,255,255,.95);
+  --line:rgba(148,163,184,.30); --line-soft:rgba(148,163,184,.20); --line-hair:rgba(148,163,184,.4);
+  --ink:#0f172a; --ink2:#334155; --dim:#64748b; --faint:#94a3b8;
+  --cyan:#0284c7; --cyan-bright:#0090ff; --cyan-glow:rgba(2,132,199,.20);
+  --violet:#6366f1; --violet-glow:rgba(99,102,241,.18);
+  --red:#dc2626; --red-bright:#ef4444; --red-glow:rgba(220,38,38,.22);
+  --amber:#c2790c; --amber-glow:rgba(194,121,12,.18);
+  --green:#0d9159; --green-glow:rgba(13,145,89,.18);
+  --font-display:'Space Grotesk',ui-sans-serif,system-ui,sans-serif;
+  --font-body:'Inter',ui-sans-serif,system-ui,sans-serif;
+  --font-mono:'JetBrains Mono',ui-monospace,'SF Mono',Menlo,monospace;
+  --r-sm:.25rem; --r-md:.5rem; --r-lg:.75rem; --r-full:9999px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--canvas);
+  background-image:linear-gradient(to right,rgba(148,163,184,.14) 1px,transparent 1px),
+                    linear-gradient(to bottom,rgba(148,163,184,.14) 1px,transparent 1px);
+  background-size:24px 24px;
+  color:var(--ink); font-family:var(--font-body); font-size:14px; line-height:1.5;
+  -webkit-font-smoothing:antialiased; min-height:100vh;
+}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:var(--line);border-radius:99px}
+h1,h2,h3{font-family:var(--font-display);margin:0}
+.mono{font-family:var(--font-mono)}
+.tabular{font-variant-numeric:tabular-nums}
+
+/* glass surfaces */
+.glass1{background:var(--glass1);backdrop-filter:blur(16px) saturate(180%);-webkit-backdrop-filter:blur(16px) saturate(180%);
+  border:1px solid var(--line-soft);box-shadow:0 8px 32px -4px rgba(15,23,42,.05)}
+.glass2{background:var(--glass2);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border-top:1px solid rgba(255,255,255,.85);border-left:1px solid rgba(255,255,255,.85);
+  border-right:1px solid var(--line);border-bottom:1px solid var(--line);
+  box-shadow:0 16px 40px -10px rgba(2,132,199,.08),0 4px 12px -2px rgba(15,23,42,.04)}
+.glass3{background:var(--glass3);backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px);
+  border:1px solid rgba(255,255,255,.9);box-shadow:0 20px 50px -10px rgba(2,132,199,.14)}
+
+/* ---------------------------------------------------------- header */
+header{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.82);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--line-soft)}
+.hdr-row{display:flex;align-items:center;gap:20px;padding:14px 28px;max-width:1680px;margin:0 auto}
+.brand{display:flex;align-items:center;gap:12px}
+.brand svg{width:32px;height:32px;flex:none}
+.brand-text{display:flex;flex-direction:column;line-height:1.15}
+.brand-text .name{font-family:var(--font-display);font-weight:700;font-size:17px;letter-spacing:.02em;
+  display:flex;align-items:center;gap:8px}
+.brand-text .name .tag{font-family:var(--font-mono);font-size:10px;font-weight:600;letter-spacing:.05em;
+  background:#e6edff;color:var(--cyan);padding:2px 7px;border-radius:4px;text-transform:uppercase}
+.brand-text .sub{font-family:var(--font-mono);font-size:10px;color:var(--faint);letter-spacing:.12em;text-transform:uppercase;margin-top:2px}
+nav.tabs{display:flex;align-items:center;gap:2px;padding:4px;border-radius:var(--r-full);
+  background:rgba(241,245,249,.75);margin-left:8px}
+nav.tabs button{font-family:var(--font-mono);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  border:0;background:transparent;color:var(--dim);padding:8px 16px;border-radius:var(--r-full);cursor:pointer;
+  transition:all .15s}
+nav.tabs button:hover{color:var(--ink);background:rgba(255,255,255,.6)}
+nav.tabs button.active{background:linear-gradient(135deg,var(--cyan) 0%,var(--cyan-bright) 100%);color:#fff;
+  box-shadow:0 2px 10px rgba(2,132,199,.28)}
+.status-pills{display:flex;align-items:center;gap:14px;margin-left:auto;padding:8px 16px;border-radius:var(--r-full);
+  background:rgba(248,250,252,.85);border:1px solid var(--line-soft)}
+.pill-stat{display:flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:10.5px;color:var(--dim);
+  letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
+.pill-stat b{color:var(--ink);font-weight:600}
+.dot{width:7px;height:7px;border-radius:50%;flex:none}
+.dot.cyan{background:var(--cyan)} .dot.grey{background:var(--faint)}
+.dot.pulse{animation:pulse-dot 1.4s ease-in-out infinite}
+@keyframes pulse-dot{0%,100%{box-shadow:0 0 0 0 var(--cyan-glow)}50%{box-shadow:0 0 0 6px transparent}}
+
+main{max-width:1680px;margin:0 auto;padding:22px 28px 60px}
+.view{display:none}
+.view.active{display:block}
+
+/* -------------------------------------------------------- analyze toolbar */
+.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:18px}
+.workload-chip{display:flex;align-items:center;gap:10px;padding:10px 16px;border-radius:var(--r-full);cursor:default}
+.workload-chip .ic{width:9px;height:9px;border-radius:50%;background:var(--faint)}
+.workload-chip.running .ic{background:var(--cyan);animation:pulse-dot 1s ease-in-out infinite}
+.workload-chip.frozen .ic{background:var(--red)}
+.workload-chip.clean .ic{background:var(--green)}
+.workload-chip .lbl{display:flex;flex-direction:column}
+.workload-chip .lbl .t{font-family:var(--font-mono);font-size:9.5px;color:var(--faint);letter-spacing:.08em;text-transform:uppercase}
+.workload-chip .lbl .v{font-family:var(--font-mono);font-size:12.5px;font-weight:600;color:var(--cyan)}
+.meta-chip{display:flex;align-items:center;gap:8px;padding:9px 16px;border-radius:var(--r-full);
+  font-family:var(--font-mono);font-size:11px;color:var(--dim)}
+.meta-chip b{color:var(--ink2);font-weight:600}
+.meta-chip .sep{width:3px;height:3px;border-radius:50%;background:var(--faint);margin:0 2px}
+
+/* pipeline stepper */
+.stepper-wrap{display:flex;justify-content:center;margin:0 0 20px;overflow-x:auto}
+.stepper{display:flex;align-items:center;gap:5px;padding:6px;border-radius:var(--r-full)}
+.step-btn{display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:var(--r-full);
+  font-family:var(--font-mono);font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--dim);white-space:nowrap;transition:all .2s}
+.step-btn .n{width:5px;height:5px;border-radius:50%;background:var(--faint)}
+.step-btn.done{color:var(--cyan)} .step-btn.done .n{background:var(--cyan)}
+.step-btn.active{background:var(--cyan);color:#fff;box-shadow:0 2px 8px rgba(2,132,199,.3)}
+.step-btn.active .n{background:#fff}
+.step-btn.error{background:var(--red);color:#fff}
+.step-btn.error .n{background:#fff}
+.step-chevron{color:var(--faint);font-size:12px}
+
+/* -------------------------------------------------------------- grid */
+.analyze-grid{display:grid;grid-template-columns:340px 1fr 360px;gap:16px}
+@media(max-width:1180px){.analyze-grid{grid-template-columns:1fr}}
+.card{border-radius:var(--r-lg);padding:18px}
+.card-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;
+  padding-bottom:10px;border-bottom:1px solid var(--line-soft)}
+.card-hdr h3{font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px}
+.card-hdr .stamp{font-family:var(--font-mono);font-size:9px;color:var(--faint);letter-spacing:.08em;text-transform:uppercase}
+
+/* drop zone */
+.drop{border:1.5px dashed var(--line-hair);border-radius:var(--r-md);padding:22px 14px;text-align:center;
+  cursor:pointer;transition:.15s;background:rgba(255,255,255,.4)}
+.drop:hover{border-color:var(--cyan);background:rgba(2,132,199,.04)}
+.drop.over{border-color:var(--cyan);background:rgba(2,132,199,.08);box-shadow:0 0 0 3px var(--cyan-glow)}
+.drop.busy{opacity:.55;pointer-events:none}
+.drop .ic{font-size:22px;color:var(--cyan)}
+.drop .main{font-size:13.5px;font-weight:600;margin-top:7px;color:var(--ink)}
+.drop .sub{font-size:11px;color:var(--dim);margin-top:3px}
+.drop .types{font-family:var(--font-mono);font-size:9.5px;color:var(--faint);margin-top:8px;letter-spacing:.03em}
+
+label.field-label{display:block;font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--faint);margin:16px 0 6px;font-weight:600}
+select{width:100%;padding:9px 11px;background:rgba(255,255,255,.7);color:var(--ink);
+  border:1px solid var(--line-hair);border-radius:var(--r-sm);font-family:var(--font-body);font-size:12.5px}
+select:focus{outline:none;border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-glow)}
+.pdesc{font-size:11px;color:var(--dim);margin-top:6px;min-height:28px;line-height:1.5}
+button.btn{width:100%;margin-top:14px;padding:11px;border:0;border-radius:var(--r-sm);cursor:pointer;
+  font-family:var(--font-mono);font-size:11.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;transition:.15s}
+button.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-primary{background:linear-gradient(135deg,var(--cyan) 0%,var(--cyan-bright) 100%);color:#fff;
+  border:1px solid rgba(255,255,255,.25);box-shadow:0 4px 14px rgba(2,132,199,.28)}
+.btn-primary:hover:not(:disabled){box-shadow:0 6px 18px rgba(2,132,199,.38)}
+.btn-danger{background:var(--red);color:#fff;border:1px solid #b91c1c}
+.btn-danger:hover:not(:disabled){box-shadow:0 0 16px rgba(220,38,38,.4)}
+
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:16px;font-family:var(--font-mono);font-size:10px;color:var(--faint)}
+.legend b{color:var(--dim);font-weight:600;text-transform:uppercase}
+.blurb{font-size:11px;color:var(--faint);margin-top:16px;line-height:1.6}
+
+/* ------------------------------------------------------------- centre */
+.centre-col{display:flex;flex-direction:column;gap:16px}
+.cube-card{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:36px 18px;min-height:340px}
+.cube-stage{perspective:900px;width:170px;height:170px;position:relative}
+.cube{width:100%;height:100%;position:relative;transform-style:preserve-3d;
+  transform:rotateX(-28deg) rotateY(38deg);
+  animation:cube-idle 10s linear infinite;transition:filter .3s}
+.cube.running{animation:cube-spin 3.2s linear infinite}
+.cube.frozen{animation:none;transform:rotateX(-28deg) rotateY(38deg)}
+.cube.clean{animation:none;transform:rotateX(-20deg) rotateY(30deg)}
+@keyframes cube-idle{0%,100%{transform:rotateX(-28deg) rotateY(30deg)}50%{transform:rotateX(-24deg) rotateY(46deg)}}
+@keyframes cube-spin{from{transform:rotateX(-28deg) rotateY(0deg)}to{transform:rotateX(-28deg) rotateY(360deg)}}
+.face{position:absolute;width:170px;height:170px;background:rgba(255,255,255,.55);
+  border:1px solid rgba(2,132,199,.35);backdrop-filter:blur(4px);
+  display:flex;align-items:center;justify-content:center;transition:background .3s,border-color .3s,box-shadow .3s}
+.cube.frozen .face{border-color:var(--red);background:rgba(254,226,226,.6);box-shadow:inset 0 0 24px rgba(220,38,38,.15)}
+.cube.clean .face{border-color:var(--green);background:rgba(220,252,231,.55)}
+.cube.running .face{box-shadow:inset 0 0 24px rgba(2,132,199,.12)}
+.face.front{transform:translateZ(85px)}
+.face.back{transform:rotateY(180deg) translateZ(85px)}
+.face.right{transform:rotateY(90deg) translateZ(85px)}
+.face.left{transform:rotateY(-90deg) translateZ(85px)}
+.face.top{transform:rotateX(90deg) translateZ(85px)}
+.face.bottom{transform:rotateX(-90deg) translateZ(85px)}
+.face .mark{font-family:var(--font-mono);font-size:9px;color:var(--cyan);letter-spacing:.06em;text-align:center;opacity:.85}
+.cube.frozen .face .mark{color:var(--red)}
+.cube.clean .face .mark{color:var(--green)}
+.cube-caption{margin-top:22px;text-align:center}
+.cube-caption .big{font-family:var(--font-display);font-weight:700;font-size:22px;letter-spacing:-.01em}
+.cube-caption.state-running .big{color:var(--cyan)}
+.cube-caption.state-frozen .big{color:var(--red)}
+.cube-caption.state-clean .big{color:var(--green)}
+.cube-caption .sub{font-size:12px;color:var(--dim);margin-top:4px}
+
+.stage-card{padding:16px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.stage-card .txt .t{font-size:13px;font-weight:600}
+.stage-card .txt .d{font-size:11.5px;color:var(--dim);margin-top:3px}
+.stage-tag{font-family:var(--font-mono);font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  padding:4px 10px;border-radius:var(--r-sm);background:var(--canvas2);color:var(--dim);white-space:nowrap}
+
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.metric{border-radius:var(--r-md);padding:12px 14px}
+.metric .n{font-family:var(--font-mono);font-size:22px;font-weight:600;color:var(--ink)}
+.metric .l{font-family:var(--font-mono);font-size:9px;color:var(--faint);text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
+.metric.allow .n{color:var(--cyan)} .metric.watch .n{color:var(--amber)} .metric.viol .n{color:var(--red)}
+
+.banner{display:none;padding:16px 20px;border-radius:var(--r-lg)}
+.banner.show{display:block;animation:slam .3s ease}
+@keyframes slam{0%{transform:scale(.97);opacity:0}100%{transform:scale(1);opacity:1}}
+.banner.contain{background:rgba(254,242,242,.9);border:1px solid var(--red)!important;box-shadow:0 0 0 1px var(--red),0 20px 50px -10px var(--red-glow)!important}
+.banner.warn{background:rgba(255,251,235,.9);border:1px solid var(--amber)!important}
+.banner .t{font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px}
+.banner.contain .t{color:var(--red)}
+.banner.warn .t{color:var(--amber)}
+.banner .d{font-size:12.5px;color:var(--ink2);margin-top:6px}
+.banner .lat{font-family:var(--font-mono);font-size:24px;font-weight:700;color:var(--ink);margin-top:8px}
+.banner .lat span{font-size:12px;color:var(--dim);font-weight:400}
+
+/* -------------------------------------------------------------- right */
+.right-col{display:flex;flex-direction:column;gap:16px}
+.feed-card{display:flex;flex-direction:column;height:420px}
+.feed{flex:1;overflow:auto;font-family:var(--font-mono);font-size:11.5px}
+.row{display:flex;gap:9px;padding:5px 4px;align-items:baseline;border-left:2px solid transparent;border-radius:2px}
+.row:hover{background:rgba(2,132,199,.04)}
+.row.suspicious{border-color:var(--amber);background:rgba(194,121,12,.05)}
+.row.violation{border-color:var(--red);background:rgba(220,38,38,.07)}
+.row.lifecycle{color:var(--faint)}
+.row .ts{color:var(--faint);flex:none;width:72px}
+.row .sc{flex:none;width:112px;color:var(--cyan);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row.suspicious .sc{color:var(--amber)} .row.violation .sc{color:var(--red)}
+.row .msg{flex:1;color:var(--ink2);word-break:break-word}
+.row.lifecycle .msg{color:var(--faint)}
+.row .lat{color:var(--faint);flex:none}
+.badge{display:inline-block;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700;letter-spacing:.04em;
+  text-transform:uppercase;margin-left:6px;background:var(--red);color:#fff}
+
+/* boundary matrix strip */
+.matrix{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:18px}
+.matrix .item{padding:13px 16px;border-radius:var(--r-md)}
+.matrix .item .k{font-family:var(--font-mono);font-size:9.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.06em}
+.matrix .item .v{font-family:var(--font-mono);font-size:12.5px;color:var(--ink);margin-top:5px;font-weight:600;
+  overflow-wrap:anywhere}
+
+/* footer strip */
+.footer-strip{display:flex;flex-wrap:wrap;gap:28px;justify-content:space-between;align-items:center;
+  margin-top:26px;padding:16px 20px;border-radius:var(--r-lg);font-size:11.5px}
+.footer-strip .feat{display:flex;align-items:center;gap:10px;max-width:260px}
+.footer-strip .feat .ic{font-size:18px;color:var(--cyan)}
+.footer-strip .feat .t{font-weight:600;font-size:12px}
+.footer-strip .feat .d{color:var(--dim);font-size:11px}
+.footer-strip .env{font-family:var(--font-mono);font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.05em}
+
+/* ------------------------------------------------------ timeline view */
+.tl-hdr{margin-bottom:18px}
+.tl-hdr .eyebrow{font-family:var(--font-mono);font-size:10px;color:var(--cyan);letter-spacing:.1em;text-transform:uppercase;font-weight:600}
+.tl-hdr h2{font-size:28px;margin-top:6px}
+.tl-hdr p{color:var(--dim);font-size:13px;margin-top:6px;max-width:640px}
+.tl-filters{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.tl-chip{font-family:var(--font-mono);font-size:10.5px;font-weight:600;padding:6px 14px;border-radius:var(--r-full);
+  color:var(--dim);cursor:pointer;transition:.15s}
+.tl-chip.active{background:var(--cyan);color:#fff}
+.tl-list{display:flex;flex-direction:column;gap:10px;margin-top:18px;position:relative}
+.tl-empty{padding:40px 20px;text-align:center;color:var(--dim);font-size:13px;border-radius:var(--r-lg)}
+.tl-item{display:flex;gap:14px;align-items:center;padding:14px 16px;border-radius:var(--r-md);cursor:pointer;
+  transition:.15s}
+.tl-item:hover{box-shadow:0 8px 24px -6px rgba(2,132,199,.14)}
+.tl-item .node{width:10px;height:10px;border-radius:50%;flex:none}
+.tl-item .node.contained{background:var(--red);box-shadow:0 0 0 4px var(--red-glow)}
+.tl-item .node.clean{background:var(--green);box-shadow:0 0 0 4px var(--green-glow)}
+.tl-item .node.error{background:var(--amber);box-shadow:0 0 0 4px var(--amber-glow)}
+.tl-item .info{flex:1;min-width:0}
+.tl-item .info .fn{font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--ink)}
+.tl-item .info .meta{font-size:11px;color:var(--dim);margin-top:2px}
+.tl-item .verdict{font-family:var(--font-mono);font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  padding:4px 10px;border-radius:var(--r-sm)}
+.tl-item .verdict.contained{background:#fee2e2;color:var(--red)}
+.tl-item .verdict.clean{background:#dcfce7;color:var(--green)}
+.tl-item .verdict.error{background:#fef3c7;color:var(--amber)}
+.tl-item .ts{font-family:var(--font-mono);font-size:10.5px;color:var(--faint);white-space:nowrap}
+
+.tl-detail{margin-top:20px;padding:22px;border-radius:var(--r-lg);display:none}
+.tl-detail.show{display:block}
+.tl-detail h3{font-size:16px;margin-bottom:14px}
+.tl-detail .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.tl-detail .stat{padding:11px 14px;border-radius:var(--r-sm);background:rgba(255,255,255,.5)}
+.tl-detail .stat .k{font-family:var(--font-mono);font-size:9px;color:var(--faint);text-transform:uppercase;letter-spacing:.05em}
+.tl-detail .stat .v{font-family:var(--font-mono);font-size:13px;color:var(--ink);margin-top:4px;font-weight:600;overflow-wrap:anywhere}
+.tl-detail .violation-box{margin-top:16px;padding:14px 16px;border-radius:var(--r-md);background:rgba(254,242,242,.7);
+  border:1px solid rgba(220,38,38,.3)}
+.tl-detail .violation-box .rule{font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--red);text-transform:uppercase}
+.tl-detail .violation-box .sm{font-size:12.5px;color:var(--ink2);margin-top:5px}
+
+/* -------------------------------------------------------- architecture view */
+.arch-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-top:18px}
+.arch-card h3{font-size:14px;display:flex;align-items:center;gap:8px}
+.arch-card .tier-tag{font-family:var(--font-mono);font-size:9px;font-weight:700;padding:3px 8px;border-radius:4px;
+  text-transform:uppercase;letter-spacing:.04em}
+.tier-tag.bypass{background:#fee2e2;color:var(--red)}
+.tier-tag.escape{background:#ffedd5;color:#c2410c}
+.tier-tag.notify{background:#e0f2fe;color:var(--cyan)}
+.tier-tag.baseline{background:#dcfce7;color:var(--green)}
+.arch-card .count{font-family:var(--font-mono);font-size:30px;font-weight:700;margin:8px 0}
+.arch-card p{font-size:12px;color:var(--dim);line-height:1.55}
+.chip-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.chip{font-family:var(--font-mono);font-size:10px;padding:3px 9px;border-radius:5px;background:rgba(148,163,184,.14);
+  color:var(--ink2);border:1px solid var(--line-soft)}
+.profiles-table{width:100%;border-collapse:collapse;margin-top:14px;font-size:12px}
+.profiles-table th{font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--faint);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+.profiles-table td{padding:9px 10px;border-bottom:1px solid var(--line-soft);font-family:var(--font-mono);font-size:11.5px}
+.profiles-table tr:last-child td{border-bottom:0}
+.yes{color:var(--green);font-weight:600} .no{color:var(--faint)}
+.arch-wide{grid-column:1/-1}
+
+.conn-indicator{font-family:var(--font-mono);font-size:10px}
+.conn-indicator.on{color:var(--green)} .conn-indicator.off{color:var(--faint)}
+</style>
 </head>
-<body class="bg-background font-body text-on-surface min-h-screen flex flex-col justify-between antialiased selection:bg-primary-fixed selection:text-on-primary-fixed">
+<body>
 
-  <!-- ================= TOP HEADER ================= -->
-  <header class="fixed top-0 left-0 w-full z-50 bg-surface-container-lowest/90 backdrop-blur-xl border-b border-outline-variant/30 shadow-[0_1px_8px_rgba(0,0,0,0.03)]">
-    <div class="h-20 w-full px-6 lg:px-10 flex items-center justify-between gap-4">
-      
-      <!-- Brand & Emblem -->
-      <div class="flex items-center gap-3.5">
-        <svg class="h-9 w-9 object-contain text-primary flex-shrink-0" viewBox="0 0 64 64" fill="none">
-          <circle cx="32" cy="32" r="30" stroke="currentColor" stroke-width="2.5" opacity="0.3"/>
-          <path d="M20 40c0-8 5-14 12-14s12 6 12 14" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
-          <circle cx="24" cy="30" r="3.5" fill="#ba1a1a"/>
-          <circle cx="32" cy="27" r="3.5" fill="#ba1a1a"/>
-          <circle cx="40" cy="30" r="3.5" fill="#ba1a1a"/>
-        </svg>
-        <div class="flex flex-col">
-          <div class="flex items-center gap-2">
-            <span class="font-headline text-lg uppercase text-on-surface tracking-wider font-bold">CERBERUS</span>
-            <span class="font-mono text-[10px] uppercase bg-surface-container-high text-primary px-1.5 py-0.5 rounded font-semibold">RUNTIME DEFENSE</span>
-          </div>
-          <span class="font-mono text-[10px] text-outline tracking-widest uppercase">EXECUTE • OBSERVE • CONTAIN</span>
-        </div>
-      </div>
-
-      <!-- Navigation Tabs -->
-      <div class="hidden xl:flex items-center">
-        <nav class="flex items-center gap-1 p-1 bg-surface-container/70 rounded-full backdrop-blur-md">
-          <button id="tab-analyze" class="nav-tab font-mono text-[11px] uppercase px-4 py-1.5 rounded-full text-on-surface-variant hover:bg-surface-container-high transition-all">ANALYZE</button>
-          <button id="tab-timeline" class="nav-tab font-mono text-[11px] uppercase px-4 py-1.5 rounded-full text-on-surface-variant hover:bg-surface-container-high transition-all">TIMELINE &amp; HISTORY</button>
-          <button id="tab-deep" class="nav-tab font-mono text-[11px] uppercase px-4 py-1.5 rounded-full bg-primary-container text-on-primary-container font-semibold shadow-[0_2px_8px_rgba(0,97,148,0.18)] transition-all">DEEP REPORT</button>
-          <button id="tab-system" class="nav-tab font-mono text-[11px] uppercase px-4 py-1.5 rounded-full text-on-surface-variant hover:bg-surface-container-high transition-all">ARCHITECTURE &amp; SYSTEM</button>
-        </nav>
-      </div>
-
-      <!-- Header Status & Execution Mode Badge -->
-      <div class="flex items-center gap-3">
-        <!-- Persistent Execution Mode Badge (Requested Feature) -->
-        <div id="vm-badge" class="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-surface-container-high/80 border border-primary/25 font-mono text-[11px] font-semibold text-primary shadow-sm transition-all">
-          <span id="vm-badge-dot" class="w-2 h-2 rounded-full bg-primary"></span>
-          <span id="vm-badge-text">◈ LOCAL SANDBOX</span>
-        </div>
-
-        <!-- Sandbox & Probes Status -->
-        <div class="hidden md:flex items-center gap-3 px-3.5 py-1.5 rounded-full bg-surface-container-low/90 text-on-surface-variant font-mono text-[10px]">
-          <div class="flex items-center gap-1.5">
-            <span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
-            <span>SANDBOX: <b class="text-primary">ACTIVE</b></span>
-          </div>
-          <div class="flex items-center gap-1.5">
-            <span class="w-1.5 h-1.5 rounded-full bg-outline-variant"></span>
-            <span>PROBES: <b class="text-on-surface">READY</b></span>
-          </div>
-          <div class="flex items-center gap-1.5">
-            <span class="w-1.5 h-1.5 rounded-full bg-outline-variant"></span>
-            <span class="text-outline">TMPFS ROOT</span>
-          </div>
-        </div>
+<header>
+  <div class="hdr-row">
+    <div class="brand">
+      <svg viewBox="0 0 64 64" fill="none">
+        <polygon points="32,4 50,15 50,37 32,48 14,37 14,15" fill="none" stroke="#0284c7" stroke-width="2" opacity=".55"/>
+        <polygon points="32,16 42,22 42,34 32,40 22,34 22,22" fill="#0284c7" opacity=".18" stroke="#0284c7" stroke-width="1.5"/>
+        <circle cx="32" cy="28" r="4.5" fill="#6366f1"/>
+      </svg>
+      <div class="brand-text">
+        <span class="name">CERBERUS <span class="tag">Runtime Defense</span></span>
+        <span class="sub">Execute · Observe · Contain</span>
       </div>
     </div>
-  </header>
-
-  <!-- ================= MAIN CONTENT ================= -->
-  <main class="w-full pt-24 pb-12 flex-1 px-4 lg:px-8 max-w-[1720px] mx-auto">
-    <div class="flex flex-col w-full gap-5">
-
-      <!-- ================= INGRESS & CONTROL BAR ================= -->
-      <section class="w-full bg-surface-container-lowest/90 backdrop-blur-xl p-4 rounded-xl shadow-sm border border-outline-variant/30 flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-4">
-        
-        <!-- Left: Drag-and-drop / File Ingress -->
-        <div id="drop-zone" class="flex-1 flex items-center justify-between p-3 rounded-lg border-2 border-dashed border-outline-variant hover:border-primary bg-surface-container-low/60 cursor-pointer transition-all">
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center text-primary">
-              <span class="material-symbols-outlined text-[22px]">upload_file</span>
-            </div>
-            <div class="flex flex-col">
-              <div class="flex items-center gap-2">
-                <span id="drop-main-text" class="font-headline text-sm font-bold text-on-surface">Drop script to check</span>
-                <span class="font-mono text-[10px] uppercase bg-surface-container-high text-outline px-1.5 py-0.5 rounded">.py .sh .js .rb .pl .lua</span>
-              </div>
-              <span id="drop-sub-text" class="font-body text-xs text-on-surface-variant">Click to browse or drag file here (max 256 KiB)</span>
-            </div>
-          </div>
-          <button id="btn-browse" class="px-3 py-1.5 rounded bg-surface-container-high text-primary font-mono text-xs font-semibold hover:bg-primary hover:text-white transition-all">
-            BROWSE…
-          </button>
-          <input type="file" id="file-input" class="hidden" accept=".py,.sh,.js,.rb,.pl,.lua"/>
-        </div>
-
-        <!-- Middle: Bundled Samples & Execution Controls -->
-        <div class="flex items-center gap-2 flex-wrap xl:flex-nowrap">
-          <div class="flex flex-col gap-1">
-            <label class="font-mono text-[10px] uppercase text-outline font-semibold tracking-wider">SAMPLE PAYLOAD</label>
-            <select id="sel-sample" class="bg-surface-container px-3 py-1.5 rounded-lg border border-outline-variant/50 font-mono text-xs text-on-surface focus:outline-none focus:border-primary min-w-[200px]">
-              <option value="exfil_credentials.py">exfil_credentials.py</option>
-              <option value="escape_attempt.py">escape_attempt.py</option>
-              <option value="benign_wordcount.py">benign_wordcount.py</option>
-              <option value="fork_bomb_lite.py">fork_bomb_lite.py</option>
-              <option value="exfil_network.py">exfil_network.py</option>
-            </select>
-          </div>
-
-          <div class="flex flex-col gap-1">
-            <label class="font-mono text-[10px] uppercase text-outline font-semibold tracking-wider">POLICY</label>
-            <select id="sel-policy" class="bg-surface-container px-3 py-1.5 rounded-lg border border-outline-variant/50 font-mono text-xs text-on-surface focus:outline-none focus:border-primary">
-              <option value="strict">strict</option>
-              <option value="loopback">loopback</option>
-              <option value="observe">observe</option>
-              <option value="paranoid">paranoid</option>
-            </select>
-          </div>
-
-          <div class="flex flex-col gap-1">
-            <label class="font-mono text-[10px] uppercase text-outline font-semibold tracking-wider">NETNS</label>
-            <select id="sel-net" class="bg-surface-container px-3 py-1.5 rounded-lg border border-outline-variant/50 font-mono text-xs text-on-surface focus:outline-none focus:border-primary">
-              <option value="none">none</option>
-              <option value="host">host</option>
-            </select>
-          </div>
-
-          <!-- Run Sample Button -->
-          <button id="btn-run-sample" class="self-end px-4 py-2 rounded-lg bg-primary text-on-primary font-mono text-xs uppercase font-bold hover:bg-primary-container transition-all flex items-center gap-1.5 shadow-sm">
-            <span class="material-symbols-outlined text-[16px]">play_arrow</span>
-            <span>RUN SAMPLE</span>
-          </button>
-        </div>
-
-        <!-- Right: Disposable VM Toggle Tickbox (Requested Feature) -->
-        <div class="p-2.5 rounded-lg bg-surface-container-low border border-outline-variant/40 flex items-center gap-3">
-          <input type="checkbox" id="chk-vm" class="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary cursor-pointer"/>
-          <label for="chk-vm" class="cursor-pointer flex flex-col select-none">
-            <span class="font-mono text-xs font-bold text-on-surface flex items-center gap-1">
-              <span>Run in disposable VM</span>
-              <span class="material-symbols-outlined text-[14px] text-secondary">shield</span>
-            </span>
-            <span class="font-mono text-[10px] text-outline">QEMU isolated boundary · 2 boundaries deep</span>
-          </label>
-        </div>
-
-      </section>
-
-      <!-- ================= INCIDENT REPORT HEADER & ACTIONS ================= -->
-      <section class="bg-surface-container-lowest/90 backdrop-blur-2xl p-4 rounded-xl shadow-sm border border-outline-variant/30 flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4">
-        <div class="flex items-center gap-3.5">
-          <div id="incident-icon-box" class="w-11 h-11 rounded-lg bg-surface-container-high flex items-center justify-center text-primary shadow-inner">
-            <span id="incident-icon" class="material-symbols-outlined text-[24px]">science</span>
-          </div>
-          <div class="flex flex-col">
-            <div class="flex items-center gap-2">
-              <span id="incident-title" class="font-headline text-lg font-bold text-on-surface">INCIDENT REPORT // CRB-8942-X</span>
-              <span id="incident-verdict-badge" class="font-mono text-[11px] bg-surface-container-high text-primary px-2 py-0.5 rounded uppercase font-bold">
-                IDLE / READY
-              </span>
-            </div>
-            <span id="incident-meta" class="font-mono text-xs text-outline">
-              TRACEPOINT: NONE • TARGET: ingress_payload.py • LATENCY TO CONTAIN: N/A
-            </span>
-          </div>
-        </div>
-
-        <!-- Action Buttons -->
-        <div class="flex items-center gap-2 flex-wrap">
-          <button id="btn-export-json" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container-low text-on-surface hover:bg-surface-container-high font-mono text-xs uppercase font-semibold transition-all border border-outline-variant/30">
-            <span class="material-symbols-outlined text-[16px] text-primary">code</span>
-            <span>EXPORT FORENSIC JSON</span>
-          </button>
-          <button id="btn-export-trace" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container-low text-on-surface hover:bg-surface-container-high font-mono text-xs uppercase font-semibold transition-all border border-outline-variant/30">
-            <span class="material-symbols-outlined text-[16px] text-secondary">terminal</span>
-            <span>KERNEL TRACE ARTIFACTS</span>
-          </button>
-          <button id="btn-purge" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-tertiary-fixed text-on-tertiary-fixed hover:bg-tertiary-container hover:text-white font-mono text-xs uppercase font-semibold transition-all">
-            <span class="material-symbols-outlined text-[16px]">delete_forever</span>
-            <span>PURGE SESSION</span>
-          </button>
-        </div>
-      </section>
-
-      <!-- ================= 6 STAGES PIPELINE CONDUIT ================= -->
-      <section class="w-full bg-surface-container-lowest/80 backdrop-blur-xl p-5 rounded-xl shadow-sm border border-outline-variant/30 flex flex-col gap-3 relative overflow-hidden">
-        <div class="flex items-center justify-between z-10">
-          <div class="flex items-center gap-2">
-            <span id="pipeline-dot" class="w-2.5 h-2.5 rounded-full bg-primary animate-pulse"></span>
-            <span class="font-headline text-base font-bold text-on-surface">SYNCHRONOUS FORENSIC CONDUIT</span>
-            <span class="font-mono text-[11px] text-outline uppercase ml-2 hidden sm:inline">CLICK STAGE NODE TO DRILL DOWN</span>
-          </div>
-          <div class="flex items-center gap-1 font-mono text-xs text-outline">
-            <span>PIPELINE INTEGRITY:</span>
-            <span id="pipeline-status" class="text-primary font-bold">100% ATTESTED</span>
-          </div>
-        </div>
-
-        <!-- The 6 Stage Cards Grid -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2.5 z-10 relative">
-          
-          <!-- Stage 1: Ingress -->
-          <div class="stage-card cursor-pointer group flex flex-col justify-between p-3.5 rounded-xl bg-surface-container-lowest border border-outline-variant/40 hover:bg-surface-container-high transition-all shadow-sm ring-2 ring-primary" data-stage-id="1">
-            <div class="flex items-center justify-between mb-1">
-              <span class="font-mono text-[11px] text-primary font-bold">01 // INGRESS</span>
-              <span class="material-symbols-outlined text-primary text-[18px]">draft</span>
-            </div>
-            <div class="flex flex-col gap-0.5 my-1">
-              <div id="st1-name" class="font-mono text-xs font-bold text-on-surface truncate">ingress_payload.py</div>
-              <div id="st1-hash" class="font-mono text-[10px] text-outline truncate">SHA256: 7f83b1...a90e</div>
-              <div id="st1-size" class="font-mono text-[10px] text-on-surface-variant">Size: 14.2 KB (Untrusted)</div>
-            </div>
-            <div class="flex items-center justify-between mt-2 pt-1 border-t border-outline-variant/20">
-              <span class="font-mono text-[10px] text-outline">STATUS</span>
-              <span id="st1-status" class="font-mono text-[10px] px-1.5 py-0.5 rounded bg-surface-container-high text-primary font-semibold">RECEIVED</span>
-            </div>
-          </div>
-
-          <!-- Stage 2: Isolation -->
-          <div class="stage-card cursor-pointer group flex flex-col justify-between p-3.5 rounded-xl bg-surface-container-lowest border border-outline-variant/40 hover:bg-surface-container-high transition-all shadow-sm" data-stage-id="2">
-            <div class="flex items-center justify-between mb-1">
-              <span class="font-mono text-[11px] text-secondary font-bold">02 // ISOLATION</span>
-              <span class="material-symbols-outlined text-secondary text-[18px]">view_in_ar</span>
-            </div>
-            <div class="flex flex-col gap-0.5 my-1">
-              <div id="st2-env" class="font-mono text-xs font-bold text-on-surface truncate">tmpfs Enclave</div>
-              <div id="st2-ns" class="font-mono text-[10px] text-outline truncate">mnt/pid/net: ISOLATED</div>
-              <div id="st2-cap" class="font-mono text-[10px] text-on-surface-variant">cgroups v2: 50MB Cap</div>
-            </div>
-            <div class="flex items-center justify-between mt-2 pt-1 border-t border-outline-variant/20">
-              <span class="font-mono text-[10px] text-outline">CONTAINER</span>
-              <span id="st2-status" class="font-mono text-[10px] px-1.5 py-0.5 rounded bg-surface-container-high text-secondary font-semibold">SECURED</span>
-            </div>
-          </div>
-
-          <!-- Stage 3: Probes -->
-          <div class="stage-card cursor-pointer group flex flex-col justify-between p-3.5 rounded-xl bg-surface-container-lowest border border-outline-variant/40 hover:bg-surface-container-high transition-all shadow-sm" data-stage-id="3">
-            <div class="flex items-center justify-between mb-1">
-              <span class="font-mono text-[11px] text-primary-container font-bold">03 // PROBES</span>
-              <span class="material-symbols-outlined text-primary-container text-[18px]">graphic_eq</span>
-            </div>
-            <div class="flex flex-col gap-0.5 my-1">
-              <div class="font-mono text-xs font-bold text-on-surface truncate">seccomp-notify</div>
-              <div id="st3-lastcall" class="font-mono text-[10px] text-outline truncate">sys_enter_connect</div>
-              <div id="st3-detail" class="font-mono text-[10px] text-tertiary font-semibold truncate">Active inspection</div>
-            </div>
-            <div class="flex items-center justify-between mt-2 pt-1 border-t border-outline-variant/20">
-              <span class="font-mono text-[10px] text-outline">TRACE</span>
-              <span id="st3-evts" class="font-mono text-[10px] px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface font-semibold">0 EVTS</span>
-            </div>
-          </div>
-
-          <!-- Stage 4: Inference -->
-          <div class="stage-card cursor-pointer group flex flex-col justify-between p-3.5 rounded-xl bg-surface-container-lowest border border-outline-variant/40 hover:bg-surface-container-high transition-all shadow-sm" data-stage-id="4">
-            <div class="flex items-center justify-between mb-1">
-              <span class="font-mono text-[11px] text-tertiary-container font-bold">04 // INFERENCE</span>
-              <span class="material-symbols-outlined text-tertiary-container text-[18px]">psychology</span>
-            </div>
-            <div class="flex flex-col gap-0.5 my-1">
-              <div id="st4-title" class="font-mono text-xs font-bold text-on-surface truncate">Default-Deny Policy</div>
-              <div id="st4-rule" class="font-mono text-[10px] text-outline truncate">Rule: strict allowlist</div>
-              <div id="st4-risk" class="font-mono text-[10px] text-on-surface-variant">Risk: EVALUATING</div>
-            </div>
-            <div class="flex items-center justify-between mt-2 pt-1 border-t border-outline-variant/20">
-              <span class="font-mono text-[10px] text-outline">DECISION</span>
-              <span id="st4-status" class="font-mono text-[10px] px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-bold">ANALYZING</span>
-            </div>
-          </div>
-
-          <!-- Stage 5: Containment -->
-          <div class="stage-card cursor-pointer group flex flex-col justify-between p-3.5 rounded-xl bg-surface-container-lowest border border-outline-variant/40 hover:bg-surface-container-high transition-all shadow-sm" data-stage-id="5">
-            <div class="flex items-center justify-between mb-1">
-              <span class="font-mono text-[11px] text-tertiary font-bold">05 // CONTAINMENT</span>
-              <span class="material-symbols-outlined text-tertiary text-[18px]">lock_clock</span>
-            </div>
-            <div class="flex flex-col gap-0.5 my-1">
-              <div id="st5-lock" class="font-mono text-xs font-bold text-on-surface truncate">cgroup.freeze</div>
-              <div id="st5-state" class="font-mono text-[10px] text-outline truncate">Parked in-kernel</div>
-              <div id="st5-lat" class="font-mono text-[10px] text-on-surface-variant">Latency: -</div>
-            </div>
-            <div class="flex items-center justify-between mt-2 pt-1 border-t border-outline-variant/20">
-              <span class="font-mono text-[10px] text-outline">ACTION</span>
-              <span id="st5-status" class="font-mono text-[10px] px-1.5 py-0.5 rounded bg-surface-container-high text-outline font-bold">STANDBY</span>
-            </div>
-          </div>
-
-          <!-- Stage 6: Final Verdict -->
-          <div class="stage-card cursor-pointer group flex flex-col justify-between p-3.5 rounded-xl bg-surface-container-lowest border border-outline-variant/40 hover:bg-surface-container-high transition-all shadow-sm" data-stage-id="6">
-            <div class="flex items-center justify-between mb-1">
-              <span class="font-mono text-[11px] text-primary font-bold">06 // FINAL VERDICT</span>
-              <span class="material-symbols-outlined text-primary text-[20px]">verified_user</span>
-            </div>
-            <div class="flex flex-col gap-0.5 my-1">
-              <div id="st6-title" class="font-mono text-xs font-bold text-on-surface leading-tight truncate">READY</div>
-              <div id="st6-sub" class="font-mono text-[10px] text-outline truncate">Awaiting execution</div>
-              <div id="st6-exit" class="font-mono text-[10px] text-primary font-semibold">Exit: -</div>
-            </div>
-            <div class="flex items-center justify-between mt-2 pt-1 border-t border-outline-variant/20">
-              <span class="font-mono text-[10px] text-outline">RESULT</span>
-              <span id="st6-badge" class="font-mono text-[10px] px-1.5 py-0.5 rounded bg-surface-container-high text-outline font-bold tracking-wider">STANDBY</span>
-            </div>
-          </div>
-
-        </div>
-
-        <!-- Conduit Progress Bar -->
-        <div class="w-full h-1 bg-surface-container-high rounded-full overflow-hidden flex mt-1">
-          <div id="conduit-progress" class="h-full bg-gradient-to-r from-primary via-secondary to-primary-container transition-all duration-300 w-1/6"></div>
-        </div>
-      </section>
-
-      <!-- ================= INSPECTOR & TELEMETRY SPLIT ================= -->
-      <div class="grid grid-cols-1 xl:grid-cols-12 gap-5">
-        
-        <!-- Left: Stage Dynamic Inspector & Ring Buffer (8 Cols) -->
-        <div class="xl:col-span-8 flex flex-col gap-5">
-          
-          <!-- Stage Dynamic Inspector -->
-          <div id="stage-detail-panel" class="bg-surface-container-lowest/90 backdrop-blur-2xl p-5 rounded-xl shadow-sm border border-outline-variant/30 flex flex-col gap-4">
-            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-2 border-b border-outline-variant/20 gap-2">
-              <div class="flex items-center gap-3">
-                <div id="detail-badge-icon" class="w-8 h-8 rounded-lg bg-primary-fixed flex items-center justify-center text-on-primary-fixed font-bold">
-                  <span class="material-symbols-outlined text-[18px]">draft</span>
-                </div>
-                <div class="flex flex-col">
-                  <span id="detail-title" class="font-headline text-sm font-bold text-on-surface">STAGE 01: UNTRUSTED FILE INGRESS SPECIFICATION</span>
-                  <span id="detail-subtitle" class="font-mono text-[11px] text-outline">CERBERUS DAEMON: INGESTION ENCLAVE PIPELINE</span>
-                </div>
-              </div>
-              <span id="detail-tag" class="font-mono text-[10px] px-2.5 py-1 rounded bg-surface-container-high text-primary font-semibold">STAGE ACTIVE</span>
-            </div>
-
-            <!-- Dynamic 3 Cards Target -->
-            <div id="detail-body" class="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
-              <!-- Dynamically populated via JS -->
-            </div>
-
-            <!-- SVG Execution Divergence Waveform -->
-            <div class="flex flex-col gap-1.5 mt-2 bg-surface-container-lowest p-3 rounded-lg border border-outline-variant/20">
-              <div class="flex items-center justify-between">
-                <span class="font-mono text-[10px] text-outline uppercase">EXECUTION DIVERGENCE TIMELINE</span>
-                <span id="timeline-resolution" class="font-mono text-[10px] text-primary">REAL-TIME SUPERVISOR LATENCY</span>
-              </div>
-              <div class="w-full h-24 flex items-end">
-                <svg id="divergence-svg" class="w-full h-full text-primary" preserveAspectRatio="none" viewBox="0 0 600 80">
-                  <line stroke="currentColor" stroke-opacity="0.1" stroke-width="1" x1="0" x2="600" y1="20" y2="20"></line>
-                  <line stroke="currentColor" stroke-opacity="0.1" stroke-width="1" x1="0" x2="600" y1="40" y2="40"></line>
-                  <line stroke="currentColor" stroke-opacity="0.1" stroke-width="1" x1="0" x2="600" y1="60" y2="60"></line>
-                  <polygon id="svg-anomaly-poly" fill="#ba1a1a" fill-opacity="0.15" points="340,80 340,15 410,12 430,75 430,80" class="hidden"></polygon>
-                  <path id="svg-wave-path" d="M0,75 Q40,74 80,72 T160,70 T240,68 T320,60 T350,15 T380,18 T410,12 T425,75 T480,77 T600,78" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2"></path>
-                  <circle id="svg-intercept-dot" cx="410" cy="12" fill="#ba1a1a" r="4.5" class="hidden"></circle>
-                  <text id="svg-intercept-text" fill="#ba1a1a" font-family="JetBrains Mono" font-size="10" font-weight="bold" x="420" y="20" class="hidden">INTERCEPT</text>
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          <!-- Raw eBPF / Seccomp Ring Buffer Table -->
-          <div class="bg-surface-container-lowest/90 backdrop-blur-2xl p-5 rounded-xl shadow-sm border border-outline-variant/30 flex flex-col gap-3">
-            <div class="flex items-center justify-between pb-1">
-              <div class="flex items-center gap-2.5">
-                <span class="material-symbols-outlined text-secondary text-[20px]">developer_board</span>
-                <span class="font-headline text-sm font-bold text-on-surface">RAW eBPF / SECCOMP RING BUFFER</span>
-              </div>
-              <div class="flex items-center gap-1.5 font-mono text-[11px] text-secondary font-semibold">
-                <span class="w-2 h-2 rounded-full bg-secondary animate-ping"></span>
-                <span>STREAM SYNCHRONIZED</span>
-              </div>
-            </div>
-
-            <!-- Terminal Feed -->
-            <div class="bg-surface-container p-3 rounded-lg flex flex-col gap-1 font-mono text-[11px] overflow-x-auto max-h-80 border border-outline-variant/30">
-              <div class="flex items-center gap-4 text-outline font-semibold pb-1 border-b border-outline-variant/30">
-                <span class="w-20 shrink-0">TIMESTAMP</span>
-                <span class="w-24 shrink-0">PID/TGID</span>
-                <span class="w-36 shrink-0">TRACEPOINT</span>
-                <span class="flex-1">ARGUMENTS / KERNEL DESCRIPTOR</span>
-                <span class="w-16 text-right shrink-0">LATENCY</span>
-              </div>
-              <div id="feed-rows" class="flex flex-col gap-1 overflow-y-auto max-h-64">
-                <!-- Streaming rows append here -->
-                <div class="text-outline text-center py-6 font-mono text-xs">Waiting for session launch…</div>
-              </div>
-            </div>
-          </div>
-
-        </div>
-
-        <!-- Right: Namespace Matrix, Cgroups Gauges & Attestation (4 Cols) -->
-        <div class="xl:col-span-4 flex flex-col gap-5">
-          
-          <!-- Namespace Matrix -->
-          <div class="bg-surface-container-lowest/90 backdrop-blur-2xl p-5 rounded-xl shadow-sm border border-outline-variant/30 flex flex-col gap-3">
-            <div class="flex items-center justify-between pb-1">
-              <span class="font-headline text-sm font-bold text-on-surface">NAMESPACE MATRIX</span>
-              <span class="font-mono text-[11px] text-primary font-bold">6/6 ATTESTED</span>
-            </div>
-            <div class="flex flex-col gap-2">
-              <div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-low">
-                <div class="flex items-center gap-2.5">
-                  <span class="material-symbols-outlined text-primary text-[18px]">folder_special</span>
-                  <div class="flex flex-col">
-                    <span class="font-mono text-xs font-bold text-on-surface">CLONE_NEWNS</span>
-                    <span class="font-mono text-[10px] text-outline">Isolated /sandbox root</span>
-                  </div>
-                </div>
-                <span class="font-mono text-[10px] bg-surface-container-high text-primary px-2 py-0.5 rounded font-semibold">SEALED</span>
-              </div>
-              <div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-low">
-                <div class="flex items-center gap-2.5">
-                  <span class="material-symbols-outlined text-primary text-[18px]">tag</span>
-                  <div class="flex flex-col">
-                    <span class="font-mono text-xs font-bold text-on-surface">CLONE_NEWPID</span>
-                    <span class="font-mono text-[10px] text-outline">Root virtual PID 1 isolated</span>
-                  </div>
-                </div>
-                <span class="font-mono text-[10px] bg-surface-container-high text-primary px-2 py-0.5 rounded font-semibold">MASKED</span>
-              </div>
-              <div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-low">
-                <div class="flex items-center gap-2.5">
-                  <span class="material-symbols-outlined text-tertiary text-[18px]">cell_tower</span>
-                  <div class="flex flex-col">
-                    <span class="font-mono text-xs font-bold text-on-surface">CLONE_NEWNET</span>
-                    <span class="font-mono text-[10px] text-outline">Loopback ONLY / air-gapped</span>
-                  </div>
-                </div>
-                <span class="font-mono text-[10px] bg-tertiary-fixed text-on-tertiary-fixed px-2 py-0.5 rounded font-bold">AIR-GAPPED</span>
-              </div>
-              <div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-low">
-                <div class="flex items-center gap-2.5">
-                  <span class="material-symbols-outlined text-primary text-[18px]">memory</span>
-                  <div class="flex flex-col">
-                    <span class="font-mono text-xs font-bold text-on-surface">CLONE_NEWIPC</span>
-                    <span class="font-mono text-[10px] text-outline">Zero POSIX message queues</span>
-                  </div>
-                </div>
-                <span class="font-mono text-[10px] bg-surface-container-high text-primary px-2 py-0.5 rounded font-semibold">DISCONNECTED</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Cgroups V2 Gauges -->
-          <div class="bg-surface-container-lowest/90 backdrop-blur-2xl p-5 rounded-xl shadow-sm border border-outline-variant/30 flex flex-col gap-3">
-            <div class="flex items-center justify-between pb-1">
-              <span class="font-headline text-sm font-bold text-on-surface">CGROUPS V2 GAUGES</span>
-              <span class="font-mono text-[11px] text-outline">LIMIT: 50.0 MB</span>
-            </div>
-            <div class="flex flex-col gap-1">
-              <div class="flex items-center justify-between font-mono text-[11px]">
-                <span class="text-outline">ENCLAVE MEMORY (RSS)</span>
-                <span id="gauge-mem-text" class="text-on-surface font-bold">14.8 MB / 50.0 MB (29.6%)</span>
-              </div>
-              <div class="w-full h-2 bg-surface-container-high rounded-full overflow-hidden">
-                <div id="gauge-mem-bar" class="h-full bg-primary rounded-full transition-all" style="width: 29.6%;"></div>
-              </div>
-            </div>
-            <div class="flex flex-col gap-1">
-              <div class="flex items-center justify-between font-mono text-[11px]">
-                <span class="text-outline">CPU BANDWIDTH QUOTA</span>
-                <span id="gauge-cpu-text" class="text-on-surface font-bold">100ms / 200ms QUOTA</span>
-              </div>
-              <div class="w-full h-2 bg-surface-container-high rounded-full overflow-hidden">
-                <div id="gauge-cpu-bar" class="h-full bg-secondary rounded-full transition-all" style="width: 50%;"></div>
-              </div>
-            </div>
-            <div class="p-2.5 bg-surface-container-low rounded-lg flex items-center justify-between font-mono text-[11px]">
-              <span class="text-on-surface-variant">OOM KILLER TRIGGER:</span>
-              <span class="text-on-surface font-bold">STANDBY (INACTIVE)</span>
-            </div>
-          </div>
-
-          <!-- Zero-Leak Attestation Card -->
-          <div class="bg-gradient-to-br from-surface-container-lowest via-surface-container-low to-surface-container-high p-5 rounded-xl shadow-sm border border-outline-variant/30 flex flex-col gap-3">
-            <div class="flex items-center gap-3">
-              <span class="material-symbols-outlined text-primary text-[28px]">shield</span>
-              <div class="flex flex-col">
-                <span class="font-headline text-sm font-bold text-on-surface">CERBERUS ZERO-LEAK</span>
-                <span class="font-mono text-[10px] text-outline">ATTESTATION PROTOCOL // STASIS</span>
-              </div>
-            </div>
-            <p class="font-body text-xs text-on-surface-variant leading-relaxed">
-              All untrusted system calls originated from within the quarantined ephemeral container are intercepted and judged prior to host kernel execution.
-            </p>
-            <div class="flex items-center justify-between pt-1 font-mono text-[11px] border-t border-outline-variant/20">
-              <span class="text-outline">CRYPTO PROOF:</span>
-              <span id="attestation-hash" class="text-primary font-semibold">ED25519::0x9180ACDF</span>
-            </div>
-          </div>
-
-        </div>
-
-      </div>
-
+    <nav class="tabs" id="tabs">
+      <button data-view="analyze" class="active">Analyze</button>
+      <button data-view="timeline">Timeline &amp; History</button>
+      <button data-view="architecture">Architecture &amp; System</button>
+    </nav>
+    <div class="status-pills">
+      <div class="pill-stat"><span class="dot cyan pulse" id="sandboxDot"></span>SANDBOX: <b id="sandboxState">IDLE</b></div>
+      <div class="pill-stat">ISOLATION: <b>TMPFS</b></div>
+      <div class="pill-stat conn-indicator" id="conn">○ disconnected</div>
     </div>
-  </main>
+  </div>
+</header>
 
-  <!-- ================= FOOTER ================= -->
-  <footer class="w-full bg-surface-container-lowest/90 backdrop-blur-xl border-t border-outline-variant/30 py-3 px-6 lg:px-10 z-40">
-    <div class="w-full max-w-[1720px] mx-auto flex flex-col md:flex-row items-center justify-between gap-2 font-mono text-[11px] text-outline">
-      <div class="flex items-center gap-3">
-        <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[14px] text-primary">explore</span> CERBERUS SPATIAL DEFENSE</span>
-        <span>•</span>
-        <span>SUPERVISOR: IN-KERNEL MONITOR</span>
-      </div>
-      <div class="flex items-center gap-4">
-        <span class="uppercase bg-surface-container-high/70 px-2 py-0.5 rounded text-on-surface-variant font-semibold">VINHACK 2026</span>
-        <div class="flex items-center gap-1.5">
-          <span>SUPERVISOR LATENCY:</span>
-          <span id="footer-latency" class="font-bold text-primary">&lt; 200 µs</span>
-        </div>
+<main>
+
+<!-- ================================================================ ANALYZE ================================================================ -->
+<section class="view active" id="view-analyze">
+
+  <div class="toolbar">
+    <div class="workload-chip glass1" id="workloadChip" style="border-radius:9999px">
+      <span class="ic" id="workloadIc"></span>
+      <div class="lbl">
+        <span class="t">Sandbox workload</span>
+        <span class="v" id="workloadLabel">no active run</span>
       </div>
     </div>
-  </footer>
+    <div class="meta-chip glass1" style="border-radius:9999px">
+      <span>SECCOMP:</span><b>USER_NOTIF</b>
+      <span class="sep"></span>
+      <span>CGROUP:</span><b>V2::ENFORCED</b>
+    </div>
+  </div>
 
-  <!-- ================= CLIENT ENGINE ================= -->
-  <script>
-    (function() {
-      // --- State ---
-      let ws = null;
-      let sessionRunning = false;
-      let eventCount = 0;
-      let allowedCount = 0;
-      let watchedCount = 0;
-      let violationCount = 0;
-      let currentSessionId = "CRB-" + Math.floor(1000 + Math.random() * 9000);
-      let activeStageId = 1;
-      let sessionEvents = [];
-      let currentFilename = "ingress_payload.py";
-      let isContained = false;
-      let isClean = false;
-      let violationDetail = null;
+  <div class="stepper-wrap">
+    <div class="stepper glass1" id="stepper">
+      <div class="step-btn" data-step="upload"><span class="n"></span>1. Upload</div>
+      <span class="step-chevron">›</span>
+      <div class="step-btn" data-step="isolate"><span class="n"></span>2. Isolate</div>
+      <span class="step-chevron">›</span>
+      <div class="step-btn" data-step="observe"><span class="n"></span>3. Observe</div>
+      <span class="step-chevron">›</span>
+      <div class="step-btn" data-step="detect"><span class="n"></span>4. Detect</div>
+      <span class="step-chevron">›</span>
+      <div class="step-btn" data-step="contain"><span class="n"></span>5. Contain</div>
+      <span class="step-chevron">›</span>
+      <div class="step-btn" data-step="verdict"><span class="n"></span>6. Verdict</div>
+    </div>
+  </div>
 
-      // --- Stage Templates ---
-      const stageTemplates = {
-        1: {
-          title: "STAGE 01: UNTRUSTED FILE INGRESS SPECIFICATION",
-          subtitle: "CERBERUS DAEMON: INGESTION ENCLAVE PIPELINE",
-          badge: "STAGE ACTIVE",
-          icon: "draft",
-          conduitWidth: "16.6%",
-          getCards: () => [
-            { label: "FILE PROPERTIES", title: currentFilename, rows: [
-              ["TARGET", currentFilename],
-              ["STATUS", sessionRunning ? "INGESTING" : (isContained ? "CONTAINED" : (isClean ? "VERIFIED" : "READY"))],
-              ["ISOLATION", document.getElementById("chk-vm").checked ? "QEMU VM" : "HOST TMPFS"],
-              ["POLICY", document.getElementById("sel-policy").value]
-            ]},
-            { label: "SUBMISSION CHANNEL", title: "Local Sandboxed Pipe", rows: [
-              ["DAEMON", "cerberus.supervisor"],
-              ["SECURITY", "Default-Deny Allowlist"],
-              ["SANDBOX UID", "65534 (nobody)"],
-              ["FD DESCRIPTORS", "Pulled via pidfd_getfd"]
-            ]},
-            { label: "INTEGRITY DIGESTS", title: "Cryptographic Proof", rows: [
-              ["SESSION ID", currentSessionId],
-              ["ATTESTATION", isContained ? "VIOLATION BLOCKED" : "INTACT"],
-              ["TIME", new Date().toLocaleTimeString()],
-              ["SIG STATUS", "VERIFIED"]
-            ]}
-          ]
-        },
-        2: {
-          title: "STAGE 02: SANDBOX PROVISIONING & NAMESPACE ISOLATION",
-          subtitle: "TMPFS ENCLAVE + CGROUPS V2 RUNTIME JIT BIND",
-          badge: "ISOLATION CONSTRUCTED",
-          icon: "view_in_ar",
-          conduitWidth: "33.3%",
-          getCards: () => [
-            { label: "FILESYSTEM ISOLATION", title: "tmpfs Mount Point", rows: [
-              ["MOUNT PATH", "/work"],
-              ["FLAGS", "MS_NODEV | MS_NOSUID | MS_NOEXEC"],
-              ["STORAGE CAP", "64.0 MB (In-Memory)"],
-              ["SHRED ON CLOSE", "TRUE"]
-            ]},
-            { label: "KERNEL ISOLATION", title: "Namespaces Bound", rows: [
-              ["PID NS", "Active (Virtual PID 1)"],
-              ["IPC NS", "Isolated POSIX Queues"],
-              ["UTS NS", "Host Masked (cerberus)"],
-              ["NET NS", document.getElementById("sel-net").value === "host" ? "Host shared" : "Air-gapped (loopback only)"]
-            ]},
-            { label: "CGROUPS V2 PROFILE", title: "Resource Caps Enforced", rows: [
-              ["MEMORY LIMIT", "50.0 MB Hard Ceiling"],
-              ["CPU QUOTA", "100ms / 200ms"],
-              ["PIDS MAX", "16 Threads Max"],
-              ["FREEZER", "cgroup.freeze: ACTIVE"]
-            ]}
-          ]
-        },
-        3: {
-          title: "STAGE 03: SECCOMP USER-NOTIFY OBSERVABILITY",
-          subtitle: "HIGH-RESOLUTION KERNEL SYSCALL INTERCEPTION",
-          badge: "TELEMETRY CAPTURED",
-          icon: "graphic_eq",
-          conduitWidth: "50%",
-          getCards: () => [
-            { label: "PROBE INVENTORY", title: "Kernel Filter Active", rows: [
-              ["FILTER TYPE", "SECCOMP_RET_USER_NOTIF"],
-              ["TOTAL CALLS", String(eventCount)],
-              ["ALLOWED", String(allowedCount)],
-              ["WATCHED", String(watchedCount)]
-            ]},
-            { label: "RECENT DISPATCH", title: violationDetail ? violationDetail.syscall : "Normal Flow", rows: [
-              ["LAST TRACEPOINT", violationDetail ? violationDetail.syscall : (sessionEvents[sessionEvents.length - 1]?.syscall || "none")],
-              ["VERDICT", isContained ? "VIOLATION DISRUPT" : "PASS"],
-              ["KERNEL ACTION", isContained ? "cgroup.freeze" : "CONTINUE"],
-              ["FILTER MODE", "CTYPES BPF (no eBPF toolchain)"]
-            ]},
-            { label: "SUPERVISOR METRICS", title: "Dispatch Attestation", rows: [
-              ["LOST EVENTS", "0 (Zero Drop)"],
-              ["DECIDE P50", "< 150 µs"],
-              ["TOCTOU DEFENSE", "SECCOMP_IOCTL_NOTIF_ID_VALID"],
-              ["PATH RESOLUTION", "openat2(RESOLVE_IN_ROOT)"]
-            ]}
-          ]
-        },
-        4: {
-          title: "STAGE 04: CERBERUS DECISION CORE ANALYSIS",
-          subtitle: "HEURISTIC & RULE MATRIX: INGRESS THREAT INFERRED",
-          badge: isContained ? "ANOMALY CONFIRMED" : "NOMINAL",
-          icon: "psychology",
-          conduitWidth: "66.6%",
-          getCards: () => [
-            { label: "DETECTION RULE", title: violationDetail ? (violationDetail.rule || "CRITICAL VIOLATION") : "RULE::ALLOWLIST_NOMINAL", rows: [
-              ["TRIGGER", violationDetail ? violationDetail.syscall : "Standard operations"],
-              ["CLASSIFICATION", isContained ? "CONTAINED STASIS" : "CLEAN EXECUTION"],
-              ["SUMMARY", violationDetail ? (violationDetail.summary || "") : "All evaluated syscalls within policy bounds"],
-              ["STATUS", isContained ? "TRIGGERED" : "NOMINAL"]
-            ]},
-            { label: "RISK EVALUATION", title: "Threat Vector Score", rows: [
-              ["SEVERITY", isContained ? "CRITICAL LEVEL 4" : "ZERO ANOMALY"],
-              ["PRIV ESCALATION", "PREVENTED (Non-Root)"],
-              ["LATERAL MOVEMENT", isContained ? "BLOCKED" : "NONE"],
-              ["DATA LOSS RISK", "0.00% (No Exfil)"]
-            ]},
-            { label: "DECISION ARTIFACT", title: "Immediate Stasis Order", rows: [
-              ["ACTION", isContained ? "FREEZE MID-SYSCALL" : "PERMIT"],
-              ["UNANSWERED CALL", isContained ? "YES (Parked In-Kernel)" : "NO"],
-              ["OPERATOR NOTIFIED", "TRUE (Live Stream)"],
-              ["TEARDOWN", "cgroup.kill (Atomic SIGKILL)"]
-            ]}
-          ]
-        },
-        5: {
-          title: "STAGE 05: SECCOMP HARD CONTAINMENT RESPONSE",
-          subtitle: "ACTIVE SEIZURE: FREEZE + SECCOMP STASIS + PURGE",
-          badge: isContained ? "CONTAINMENT SEALED" : "ARMED",
-          icon: "lock_clock",
-          conduitWidth: "83.3%",
-          getCards: () => [
-            { label: "KERNEL INTERCEPT", title: "Seccomp Action", rows: [
-              ["SYSCALL ACTION", isContained ? "PARK FOREVER IN-KERNEL" : "STANDBY"],
-              ["PROCESS STATE", isContained ? "STASIS / FROZEN (D State)" : "RUNNING"],
-              ["HOST SOCKET LEAK", "0 Sockets Leaked"],
-              ["RETURN CODE", isContained ? "No Return to Userspace" : "0 (Nominal)"]
-            ]},
-            { label: "FREEZER SUBSYSTEM", title: "cgroup.freeze Imposed", rows: [
-              ["CGROUP PATH", "/sys/fs/cgroup/cerberus/..."],
-              ["FREEZE LATENCY", violationDetail && violationDetail.latency_us ? (violationDetail.latency_us.toFixed(0) + " µs") : "< 200 µs"],
-              ["PIDS FROZEN", isContained ? "Entire Process Group" : "0"],
-              ["THAW PREVENTION", "Direct atomic kill via cgroup.kill"]
-            ]},
-            { label: "TEARDOWN HYGIENE", title: "Ephemeral RAM Cleanup", rows: [
-              ["TMPFS DISCARD", "Atomic unmount"],
-              ["NETWORK CLEANUP", "Netns destroyed"],
-              ["PERSISTENT DISK", "ZERO BYTES WRITTEN"],
-              ["STATUS", "PURGE READY"]
-            ]}
-          ]
-        },
-        6: {
-          title: "STAGE 06: ATTESTED VERDICT & INTEGRITY BADGE",
-          subtitle: "HOST INTEGRITY INTACT — ZERO PERSISTENCE IDENTIFIED",
-          badge: isContained ? "CONTAINED" : (isClean ? "CLEAN" : "READY"),
-          icon: "verified_user",
-          conduitWidth: "100%",
-          getCards: () => [
-            { label: "FINAL ATTESTATION", title: isContained ? "ZERO PERSISTENCE" : (isClean ? "CLEAN EXECUTION" : "READY"), rows: [
-              ["HOST CONTAMINATION", "0.00% (Absolute Zero)"],
-              ["CONTAINER DRIFT", "Null"],
-              ["VERDICT", isContained ? "CONTAINED" : (isClean ? "CLEAN" : "PENDING")],
-              ["CONCLUSION", isContained ? "Threat frozen mid-syscall" : (isClean ? "Script completed cleanly" : "Ready")]
-            ]},
-            { label: "SESSION LIFECYCLE", title: "Audit Telemetry", rows: [
-              ["TOTAL CALLS", String(eventCount)],
-              ["VIOLATIONS", String(violationCount)],
-              ["LATENCY TO FREEZE", violationDetail && violationDetail.latency_us ? (violationDetail.latency_us.toFixed(0) + " µs") : "N/A"],
-              ["DISPOSITION", isContained ? "NEUTRALIZED" : "PERMITTED"]
-            ]},
-            { label: "SECURITY GUARANTEE", title: "Integrity Stamp", rows: [
-              ["CONTAINMENT MODE", document.getElementById("chk-vm").checked ? "DISPOSABLE VM OVERLAY" : "HOST RAM SANDBOX"],
-              ["PERSISTENCE", "EPHEMERAL (RAM ONLY)"],
-              ["TRACEPROOF", "Attested by Cerberus Core"],
-              ["STATUS", "AUDIT CLOSED"]
-            ]}
-          ]
-        }
-      };
+  <div class="analyze-grid">
+    <!-- left: controls -->
+    <div class="card glass2">
+      <div class="card-hdr"><h3>🧪 Test Enclave</h3><span class="stamp">SPEC::SAND-01</span></div>
+      <div class="drop" id="drop">
+        <div class="ic">⬆</div>
+        <div class="main">Drop a script here</div>
+        <div class="sub">or click to browse · runs the instant it lands</div>
+        <div class="types">.py .sh .js .rb .pl .lua · max 256 KiB</div>
+      </div>
+      <input type="file" id="file" style="display:none" accept=".py,.sh,.js,.rb,.pl,.lua">
 
-      // --- DOM Elements ---
-      const vmBadge = document.getElementById("vm-badge");
-      const vmBadgeDot = document.getElementById("vm-badge-dot");
-      const vmBadgeText = document.getElementById("vm-badge-text");
-      const chkRunInVm = document.getElementById("chk-vm");
-      const selSample = document.getElementById("sel-sample");
-      const selPolicy = document.getElementById("sel-policy");
-      const selNet = document.getElementById("sel-net");
-      const btnRunSample = document.getElementById("btn-run-sample");
-      const dropZone = document.getElementById("drop-zone");
-      const fileInput = document.getElementById("file-input");
-      const btnBrowse = document.getElementById("btn-browse");
-      const dropMainText = document.getElementById("drop-main-text");
-      const feedRows = document.getElementById("feed-rows");
-      const conduit = document.getElementById("conduit-progress");
-      const stageCards = document.querySelectorAll(".stage-card");
+      <label class="field-label">Policy profile</label>
+      <select id="policy"></select>
 
-      // --- VM Mode Toggle & Badge ---
-      function updateVmBadge(phase = "off") {
-        const inVm = chkRunInVm.checked;
-        if (!inVm) {
-          vmBadge.className = "flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary/10 border border-primary/30 font-mono text-[11px] font-semibold text-primary shadow-sm transition-all";
-          vmBadgeDot.className = "w-2 h-2 rounded-full bg-primary";
-          vmBadgeText.textContent = "◈ LOCAL SANDBOX";
-        } else if (phase === "live") {
-          vmBadge.className = "flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/50 font-mono text-[11px] font-semibold text-emerald-700 shadow-sm transition-all";
-          vmBadgeDot.className = "w-2 h-2 rounded-full bg-emerald-500 animate-pulse";
-          vmBadgeText.textContent = "▣ DISPOSABLE VM · LIVE";
-        } else if (phase === "booting") {
-          vmBadge.className = "flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/50 font-mono text-[11px] font-semibold text-amber-700 shadow-sm transition-all";
-          vmBadgeDot.className = "w-2 h-2 rounded-full bg-amber-500 animate-ping";
-          vmBadgeText.textContent = "▣ DISPOSABLE VM · BOOTING…";
-        } else {
-          vmBadge.className = "flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-surface-container-high/80 border border-outline-variant/60 font-mono text-[11px] font-semibold text-outline shadow-sm transition-all";
-          vmBadgeDot.className = "w-2 h-2 rounded-full bg-outline";
-          vmBadgeText.textContent = "▣ DISPOSABLE VM · off (boots on run)";
-        }
-      }
+      <label class="field-label">Network</label>
+      <select id="net">
+        <option value="none">none (isolated netns)</option>
+        <option value="host">host</option>
+      </select>
 
-      chkRunInVm.addEventListener("change", () => updateVmBadge());
+      <label class="field-label" style="margin-top:20px">Or select a bundled sample</label>
+      <select id="payload"></select>
+      <div class="pdesc" id="pdesc"></div>
+      <button id="run" class="btn btn-primary">▶ Execute Runtime Cycle</button>
 
-      // --- Stage Detail Renderer ---
-      function renderStage(id) {
-        activeStageId = id;
-        const data = stageTemplates[id];
-        if (!data) return;
+      <div class="legend">
+        <span><span class="chip" style="background:transparent;border:none;padding:0"><span class="dot cyan" style="display:inline-block"></span></span> <b>allowed</b></span>
+        <span><span class="dot" style="background:var(--amber);display:inline-block"></span> <b>watched</b></span>
+        <span><span class="dot" style="background:var(--red);display:inline-block"></span> <b>violation</b></span>
+      </div>
+      <p class="blurb">Each run launches the payload inside a fresh RAM-only
+        sandbox under a seccomp user-notification monitor. Every intercepted
+        syscall is judged against the policy; on a violation the process
+        group is frozen in the kernel <em>before</em> the call completes.</p>
+    </div>
 
-        stageCards.forEach(c => {
-          c.classList.remove("ring-2", "ring-primary", "bg-surface-container-high");
-          c.classList.add("bg-surface-container-lowest");
-        });
-        const currentCard = document.querySelector(`[data-stage-id="${id}"]`);
-        if (currentCard) {
-          currentCard.classList.remove("bg-surface-container-lowest");
-          currentCard.classList.add("ring-2", "ring-primary", "bg-surface-container-high");
-        }
-
-        conduit.style.width = data.conduitWidth;
-
-        document.getElementById("detail-title").textContent = data.title;
-        document.getElementById("detail-subtitle").textContent = data.subtitle;
-        document.getElementById("detail-tag").textContent = data.badge;
-        document.getElementById("detail-badge-icon").innerHTML = `<span class="material-symbols-outlined text-[18px]">${data.icon}</span>`;
-
-        const cards = data.getCards();
-        document.getElementById("detail-body").innerHTML = cards.map(col => `
-          <div class="bg-surface-container-low/80 p-3.5 rounded-lg flex flex-col gap-1 border border-outline-variant/20">
-            <span class="font-mono text-[10px] text-outline uppercase font-bold tracking-wider">${col.label}</span>
-            <span class="font-mono text-xs font-bold text-on-surface truncate">${col.title}</span>
-            <div class="flex flex-col font-mono text-[11px] text-on-surface-variant mt-1.5 gap-1">
-              ${col.rows.map(r => `<div>${r[0]}: <span class="text-on-surface font-semibold">${r[1]}</span></div>`).join('')}
-            </div>
+    <!-- centre: enclave cube + verdict -->
+    <div class="centre-col">
+      <div class="card glass2 cube-card">
+        <div class="cube-stage">
+          <div class="cube" id="cube">
+            <div class="face front"><span class="mark">ENCLAVE<br>ISOLATED TMPFS</span></div>
+            <div class="face back"><span class="mark">CGROUP V2</span></div>
+            <div class="face right"><span class="mark">SECCOMP<br>NOTIFY</span></div>
+            <div class="face left"><span class="mark">RAM ONLY</span></div>
+            <div class="face top"><span class="mark">0x7FFF98E4</span></div>
+            <div class="face bottom"><span class="mark">CERBERUS</span></div>
           </div>
-        `).join('');
-      }
+        </div>
+        <div class="cube-caption" id="cubeCaption">
+          <div class="big" id="cubeBig">IDLE</div>
+          <div class="sub" id="cubeSub">choose a payload and press run</div>
+        </div>
+      </div>
 
-      stageCards.forEach(card => {
-        card.addEventListener("click", () => {
-          renderStage(Number(card.getAttribute("data-stage-id")));
-        });
-      });
+      <div class="card glass1 stage-card" id="stageCard">
+        <div class="txt">
+          <div class="t" id="stageTitle">Awaiting execution</div>
+          <div class="d" id="stageDesc">Select a script or sample to begin the runtime cycle.</div>
+        </div>
+        <span class="stage-tag" id="stageTag">STAGE::00</span>
+      </div>
 
-      // --- Reset Session ---
-      function resetSession(filename = "ingress_payload.py") {
-        currentFilename = filename;
-        eventCount = allowedCount = watchedCount = violationCount = 0;
-        isContained = false;
-        isClean = false;
-        violationDetail = null;
-        sessionEvents = [];
-        currentSessionId = "CRB-" + Math.floor(1000 + Math.random() * 9000);
+      <div class="banner glass2" id="banner">
+        <div class="t"><span id="bIcon">⛔</span> <span id="bTitle">CONTAINED</span> — <span id="bRule"></span></div>
+        <div class="d" id="bDesc"></div>
+        <div class="lat"><span id="bLatWho">detected &amp; frozen in</span> <b id="bLat"></b></div>
+      </div>
+    </div>
 
-        document.getElementById("incident-title").textContent = `INCIDENT REPORT // ${currentSessionId}`;
-        document.getElementById("incident-verdict-badge").className = "font-mono text-[11px] bg-surface-container-high text-primary px-2 py-0.5 rounded uppercase font-bold";
-        document.getElementById("incident-verdict-badge").textContent = "IDLE / READY";
-        document.getElementById("incident-meta").textContent = `TRACEPOINT: NONE • TARGET: ${currentFilename} • LATENCY TO CONTAIN: N/A`;
-        document.getElementById("incident-icon").textContent = "science";
-        document.getElementById("incident-icon-box").className = "w-11 h-11 rounded-lg bg-surface-container-high flex items-center justify-center text-primary shadow-inner";
+    <!-- right: live syscall feed -->
+    <div class="right-col">
+      <div class="metrics">
+        <div class="metric glass1"><div class="n tabular" id="mSys">0</div><div class="l">syscalls</div></div>
+        <div class="metric glass1 allow"><div class="n tabular" id="mAllow">0</div><div class="l">allowed</div></div>
+        <div class="metric glass1 watch"><div class="n tabular" id="mWatch">0</div><div class="l">watched</div></div>
+        <div class="metric glass1 viol"><div class="n tabular" id="mViol">0</div><div class="l">violations</div></div>
+      </div>
 
-        document.getElementById("st1-name").textContent = currentFilename;
-        document.getElementById("st1-status").textContent = "READY";
-        document.getElementById("st3-evts").textContent = "0 EVTS";
-        document.getElementById("st4-status").textContent = "ANALYZING";
-        document.getElementById("st4-status").className = "font-mono text-[10px] px-1.5 py-0.5 rounded bg-surface-container-high text-outline font-bold";
-        document.getElementById("st5-status").textContent = "STANDBY";
-        document.getElementById("st5-status").className = "font-mono text-[10px] px-1.5 py-0.5 rounded bg-surface-container-high text-outline font-bold";
-        document.getElementById("st6-badge").textContent = "STANDBY";
-        document.getElementById("st6-badge").className = "font-mono text-[10px] px-1.5 py-0.5 rounded bg-surface-container-high text-outline font-bold tracking-wider";
-        document.getElementById("st6-title").textContent = "READY";
+      <div class="card glass2 feed-card">
+        <div class="card-hdr">
+          <h3><span class="dot cyan pulse" style="display:inline-block"></span> Syscall Monitor</h3>
+          <span class="stamp" id="feedMeta">RING0_NOTIF</span>
+        </div>
+        <div class="feed" id="feed"></div>
+      </div>
 
-        document.getElementById("svg-anomaly-poly").classList.add("hidden");
-        document.getElementById("svg-intercept-dot").classList.add("hidden");
-        document.getElementById("svg-intercept-text").classList.add("hidden");
+      <button id="kill" class="btn btn-danger" disabled>✕ Manual Kill Process</button>
+    </div>
+  </div>
 
-        feedRows.innerHTML = "";
-        renderStage(activeStageId);
-      }
+  <!-- boundary matrix -->
+  <div class="card glass1">
+    <div class="card-hdr"><h3>Boundary Matrix</h3><span class="dot cyan" style="display:inline-block"></span></div>
+    <div class="matrix" id="matrix">
+      <div class="item glass1"><div class="k">Loading…</div></div>
+    </div>
+  </div>
 
-      // --- Feed Row Appender ---
-      function appendFeedRow(ev) {
-        sessionEvents.push(ev);
-        const row = document.createElement("div");
-        row.className = "flex items-center gap-4 px-2 py-1 rounded transition-colors text-[11px] font-mono";
+  <div class="footer-strip glass1">
+    <div class="feat"><span class="ic">▦</span><div><div class="t">Zero Persistence</div><div class="d">Ephemeral tmpfs unmounted &amp; destroyed on completion</div></div></div>
+    <div class="feat"><span class="ic">📡</span><div><div class="t">Air-Gapped Loopback</div><div class="d">Dedicated netns isolates external socket connect requests</div></div></div>
+    <div class="feat"><span class="ic">🛡</span><div><div class="t">Seccomp Syscall Monitor</div><div class="d">In-kernel user-notification intercepts every judged syscall</div></div></div>
+    <div class="env" id="envInfo">ENVIRONMENT: —</div>
+  </div>
+</section>
 
-        const ts = ev.ts ? new Date(ev.ts * 1000).toISOString().substr(11, 12) : new Date().toISOString().substr(11, 12);
-        const pid = ev.pid ? `${ev.pid}/${ev.pid}` : "00001/00001";
-        const sc = (ev.kind === "syscall" || ev.kind === "violation") ? (ev.syscall || "syscall") : (ev.kind === "vm_console" ? "vm_console" : ev.kind);
-        const lat = ev.latency_us ? `${ev.latency_us.toFixed(0)}µs` : "";
+<!-- ================================================================ TIMELINE ================================================================ -->
+<section class="view" id="view-timeline">
+  <div class="tl-hdr">
+    <div class="eyebrow">Chrono-Spatial Trajectory · Real Run History</div>
+    <h2>Spatial Runtime Timeline</h2>
+    <p>Every run this dashboard has executed, newest first. Nothing here is
+      synthesised — the sandbox keeps no disk state, so this list lives only
+      in this server's memory for the life of the process.</p>
+    <div class="tl-filters" id="tlFilters">
+      <span class="tl-chip glass1 active" data-filter="all">ALL (<span id="cntAll">0</span>)</span>
+      <span class="tl-chip glass1" data-filter="contained">CONTAINED (<span id="cntContained">0</span>)</span>
+      <span class="tl-chip glass1" data-filter="clean">CLEAN (<span id="cntClean">0</span>)</span>
+    </div>
+  </div>
+  <div class="tl-list glass1" id="tlList" style="padding:8px">
+    <div class="tl-empty">No runs yet — go to Analyze and execute a payload.</div>
+  </div>
+  <div class="tl-detail glass2" id="tlDetail"></div>
+</section>
 
-        if (ev.kind === "violation") {
-          row.className += " bg-tertiary-fixed text-on-tertiary-fixed font-bold";
-          row.innerHTML = `
-            <span class="w-20 shrink-0 opacity-80">${ts}</span>
-            <span class="w-24 shrink-0">${pid}</span>
-            <span class="w-36 shrink-0 font-bold">${sc}</span>
-            <span class="flex-1 truncate">⛔ VIOLATION: ${ev.summary || ""}</span>
-            <span class="w-16 text-right shrink-0 font-bold">${lat}</span>
-          `;
-        } else if (ev.kind === "vm_console") {
-          row.className += " text-secondary opacity-90";
-          row.innerHTML = `
-            <span class="w-20 shrink-0 opacity-70">${ts}</span>
-            <span class="w-24 shrink-0 font-semibold">[qemu]</span>
-            <span class="w-36 shrink-0 font-semibold">vm_boot</span>
-            <span class="flex-1 truncate">${ev.summary || ""}</span>
-            <span class="w-16 text-right shrink-0"></span>
-          `;
-        } else if (ev.severity === "suspicious") {
-          row.className += " text-amber-700 bg-amber-500/10";
-          row.innerHTML = `
-            <span class="w-20 shrink-0 opacity-75">${ts}</span>
-            <span class="w-24 shrink-0">${pid}</span>
-            <span class="w-36 shrink-0">${sc}</span>
-            <span class="flex-1 truncate">${ev.summary || ""}</span>
-            <span class="w-16 text-right shrink-0">${lat}</span>
-          `;
-        } else {
-          row.className += " text-on-surface hover:bg-surface-container-high/60";
-          row.innerHTML = `
-            <span class="w-20 shrink-0 opacity-60">${ts}</span>
-            <span class="w-24 shrink-0 text-primary font-medium">${pid}</span>
-            <span class="w-36 shrink-0 font-medium">${sc}</span>
-            <span class="flex-1 truncate text-on-surface-variant">${ev.summary || ""}</span>
-            <span class="w-16 text-right shrink-0 opacity-60">${lat}</span>
-          `;
-        }
+<!-- ============================================================== ARCHITECTURE ============================================================== -->
+<section class="view" id="view-architecture">
+  <div class="tl-hdr">
+    <div class="eyebrow">Kernel Substrate Spec · Live From cerberus/policy.py</div>
+    <h2>Runtime Subsystem &amp; Syscall Topology</h2>
+    <p>Every figure below is read from the running policy engine, not
+      hand-typed — it can never drift from what the monitor actually
+      enforces.</p>
+  </div>
+  <div class="arch-grid" id="archTiers"></div>
+  <div class="card glass2 arch-wide" style="margin-top:16px">
+    <div class="card-hdr"><h3>Isolation Substrate</h3></div>
+    <div class="matrix" id="archIsolation"></div>
+  </div>
+  <div class="card glass2 arch-wide" style="margin-top:16px">
+    <div class="card-hdr"><h3>Policy Profiles</h3></div>
+    <table class="profiles-table" id="profilesTable"></table>
+  </div>
+</section>
 
-        feedRows.appendChild(row);
-        if (feedRows.childElementCount > 1000) {
-          feedRows.removeChild(feedRows.firstChild);
-        }
-        feedRows.scrollTop = feedRows.scrollHeight;
-      }
+</main>
 
-      // --- Event Handler ---
-      function handleEvent(ev) {
-        if (!ev) return;
+<script>
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
 
-        if (ev.kind === "run_start") {
-          sessionRunning = true;
-          const fn = ev.detail?.filename || ev.summary?.split(" ")[1] || "payload.py";
-          resetSession(fn);
-          document.getElementById("incident-verdict-badge").className = "font-mono text-[11px] bg-primary-fixed text-on-primary-fixed px-2 py-0.5 rounded uppercase font-bold animate-pulse";
-          document.getElementById("incident-verdict-badge").textContent = "EXECUTING UNDER MONITOR";
-          document.getElementById("st1-status").textContent = "RECEIVED";
-          conduit.style.width = "50%";
-          return;
-        }
+/* ------------------------------------------------------------ tabs */
+$$('#tabs button').forEach(btn=>{
+  btn.onclick=()=>{
+    $$('#tabs button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    $$('.view').forEach(v=>v.classList.remove('active'));
+    $('#view-'+btn.dataset.view).classList.add('active');
+    if(btn.dataset.view==='timeline') loadHistory();
+    if(btn.dataset.view==='architecture') loadArchitecture();
+  };
+});
 
-        if (ev.kind === "vm_phase") {
-          updateVmBadge(ev.phase);
-          return;
-        }
+/* ------------------------------------------------------------ state */
+let ws, evSeen=0, allow=0, watch=0, viol=0, running=false, manualKill=false;
 
-        if (ev.kind === "vm_status") {
-          document.getElementById("incident-meta").textContent = `VM STATUS: ${ev.summary}`;
-          return;
-        }
+const STAGES=['upload','isolate','observe','detect','contain','verdict'];
+const STAGE_INFO={
+  upload:{title:'State 1: Upload & Ingestion', desc:'File received; interpreter and workdir prepared for launch.'},
+  isolate:{title:'State 2: Isolate', desc:'Fresh namespaces + tmpfs root under construction; cgroup created.'},
+  observe:{title:'State 3: Observe', desc:'Payload released under the seccomp monitor; every syscall is being judged.'},
+  detect:{title:'State 4: Detect', desc:'A syscall matched a policy violation rule.'},
+  contain:{title:'State 5: Contain', desc:'cgroup.freeze stopped every task in the group before the call returned.'},
+  verdict:{title:'State 6: Verdict', desc:'Session complete. Cryptographic teardown: tmpfs and cgroup destroyed.'},
+};
+let stageIdx=-1;
+function setStage(name, isError, force){
+  const idx = STAGES.indexOf(name);
+  // Stage advances only monotonically forward within a run. A run that
+  // completes in under a millisecond (a fast CONTAIN) can otherwise let a
+  // deliberately-delayed cosmetic transition (see the violation handler)
+  // arrive over the WebSocket *after* the real verdict already landed,
+  // stomping the finished state back to an earlier one. `force` (used by
+  // resetRun) is the only way to move the marker backward.
+  if(!force && idx < stageIdx) return;
+  stageIdx = idx;
+  $$('.step-btn').forEach(b=>b.classList.remove('active','done','error'));
+  STAGES.forEach((s,i)=>{
+    const el = document.querySelector('.step-btn[data-step="'+s+'"]');
+    if(i<idx) el.classList.add('done');
+    if(i===idx) el.classList.add(isError?'error':'active');
+  });
+  const info = STAGE_INFO[name];
+  if(info){
+    $('#stageTitle').textContent=info.title;
+    $('#stageDesc').textContent=info.desc;
+    $('#stageTag').textContent='STAGE::0'+(idx+1);
+  }
+}
 
-        if (ev.kind === "vm_console") {
-          appendFeedRow(ev);
-          return;
-        }
+function setCube(cls, big, sub){
+  const cube=$('#cube'), cap=$('#cubeCaption'), chip=$('#workloadChip');
+  cube.className='cube '+cls;
+  cap.className='cube-caption state-'+cls;
+  $('#cubeBig').textContent=big; $('#cubeSub').textContent=sub;
+  chip.className='workload-chip glass1 '+cls;
+  $('#sandboxDot').className='dot pulse '+(cls==='running'?'cyan':(cls==='frozen'?'':'grey'));
+  if(cls==='frozen') $('#sandboxDot').style.background='var(--red)';
+  else if(cls==='clean') $('#sandboxDot').style.background='var(--green)';
+  else $('#sandboxDot').style.background='';
+  $('#sandboxState').textContent = cls==='running'?'ACTIVE':(cls==='frozen'?'FROZEN':(cls==='clean'?'IDLE':'IDLE'));
+}
 
-        if (ev.kind === "syscall") {
-          eventCount++;
-          if (ev.severity === "suspicious") watchedCount++; else allowedCount++;
-          document.getElementById("st3-evts").textContent = `${eventCount} EVTS`;
-          document.getElementById("st3-lastcall").textContent = ev.syscall || "syscall";
-          appendFeedRow(ev);
-          return;
-        }
+function fmtTs(ts){
+  const d=new Date(ts*1000);
+  return d.toLocaleTimeString('en-US',{hour12:false})+'.'+String(d.getMilliseconds()).padStart(3,'0');
+}
+function escapeHtml(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 
-        if (ev.kind === "violation") {
-          eventCount++;
-          violationCount++;
-          isContained = true;
-          violationDetail = ev;
+function resetRun(){
+  evSeen=allow=watch=viol=0; manualKill=false;
+  $('#feed').innerHTML=''; $('#banner').className='banner';
+  $('#mSys').textContent='0'; $('#mAllow').textContent='0';
+  $('#mWatch').textContent='0'; $('#mViol').textContent='0';
+  $('#feedMeta').textContent='RING0_NOTIF';
+  $('#kill').disabled=false;
+  setStage('upload', false, true);
+}
+function metrics(){
+  $('#mSys').textContent=evSeen; $('#mAllow').textContent=allow;
+  $('#mWatch').textContent=watch; $('#mViol').textContent=viol;
+}
 
-          const latStr = ev.latency_us ? `${ev.latency_us.toFixed(0)} µs` : "< 200 µs";
-          document.getElementById("incident-verdict-badge").className = "font-mono text-[11px] bg-tertiary-fixed text-on-tertiary-fixed px-2 py-0.5 rounded uppercase font-bold shadow-sm";
-          document.getElementById("incident-verdict-badge").textContent = "CONTAINED STASIS";
-          document.getElementById("incident-meta").textContent = `TRACEPOINT: ${ev.syscall} • TARGET: ${currentFilename} • LATENCY TO CONTAIN: ${latStr}`;
-          document.getElementById("incident-icon").textContent = "lock_clock";
-          document.getElementById("incident-icon-box").className = "w-11 h-11 rounded-lg bg-tertiary-fixed flex items-center justify-center text-on-tertiary-fixed shadow-inner";
+function addRow(ev){
+  const feed=$('#feed');
+  const atBottom = feed.scrollHeight-feed.scrollTop-feed.clientHeight<40;
+  const row=document.createElement('div');
+  row.className='row '+(ev.severity||'info');
+  if(['lifecycle','state','run_start','run_end'].includes(ev.kind)) row.classList.add('lifecycle');
+  const sc=(ev.kind==='syscall'||ev.kind==='violation')?(ev.syscall||''):'·';
+  let badge = (ev.action==='deny+freeze'||ev.action==='deny') ? '<span class="badge">'+ev.action+'</span>' : '';
+  row.innerHTML =
+    '<span class="ts">'+(ev.ts?fmtTs(ev.ts):'')+'</span>'+
+    '<span class="sc">'+escapeHtml(sc)+'</span>'+
+    '<span class="msg">'+escapeHtml(ev.summary||'')+badge+'</span>'+
+    '<span class="lat">'+(ev.latency_us!=null?ev.latency_us.toFixed(0)+'µs':'')+'</span>';
+  feed.appendChild(row);
+  if(atBottom) feed.scrollTop=feed.scrollHeight;
+  while(feed.childElementCount>600) feed.removeChild(feed.firstChild);
+}
 
-          document.getElementById("st4-status").textContent = "DISRUPT";
-          document.getElementById("st4-status").className = "font-mono text-[10px] px-1.5 py-0.5 rounded bg-tertiary-fixed text-on-tertiary-fixed font-bold";
-          document.getElementById("st4-risk").textContent = "Risk: CRITICAL (HIGH)";
-          document.getElementById("st4-rule").textContent = `Rule: ${ev.rule || "violation"}`;
+function showBanner(ev){
+  const b=$('#banner');
+  if(b.classList.contains('show')) return; // first violation only
+  b.className='banner glass2 contain show';
+  $('#bIcon').textContent='⛔'; $('#bTitle').textContent='CONTAINED';
+  $('#bRule').textContent=ev.rule||'policy violation';
+  $('#bDesc').textContent=ev.summary||'';
+  $('#bLat').textContent=(ev.latency_us!=null?ev.latency_us.toFixed(0):'?')+' µs';
+  $('#bLatWho').textContent=(ev.detail&&ev.detail.frozen)?'detected & frozen in':'detected & denied in';
+}
+function flashWarn(title,desc){
+  const b=$('#banner');
+  b.className='banner glass2 warn show';
+  $('#bIcon').textContent='⚠'; $('#bTitle').textContent=title;
+  $('#bRule').textContent=''; $('#bDesc').textContent=desc;
+  $('#bLat').textContent=''; $('#bLatWho').textContent='';
+}
 
-          document.getElementById("st5-status").textContent = "FROZEN";
-          document.getElementById("st5-status").className = "font-mono text-[10px] px-1.5 py-0.5 rounded bg-tertiary-fixed text-on-tertiary-fixed font-bold";
-          document.getElementById("st5-lat").textContent = `Latency: ${latStr}`;
-          document.getElementById("footer-latency").textContent = latStr;
+function handle(ev){
+  if(ev.kind==='run_start'){
+    resetRun();
+    const d=ev.detail||{};
+    $('#workloadLabel').textContent=(d.filename||'payload')+(d.source?' ('+d.source+')':'');
+    setCube('running','RUNNING','payload executing under monitor');
+    addRow(ev);
+    return;
+  }
+  if(ev.kind==='lifecycle'){
+    const s=ev.summary||'';
+    if(s.startsWith('starting sandbox')) setStage('isolate');
+    else if(s.startsWith('payload released')) setStage('observe');
+    addRow(ev);
+    return;
+  }
+  if(ev.kind==='syscall'){
+    evSeen++; if(ev.severity==='suspicious') watch++; else allow++;
+    metrics(); addRow(ev); return;
+  }
+  if(ev.kind==='violation'){
+    evSeen++; viol++; metrics(); addRow(ev);
+    setStage('detect');
+    showBanner(ev);
+    setTimeout(()=>setStage('contain'), 120);
+    setCube('frozen','FROZEN','process group stopped mid-syscall');
+    $('#kill').disabled=true;
+    return;
+  }
+  if(ev.kind==='state'){ addRow(ev); return; }
+  if(ev.kind==='run_end'){
+    const d=ev.detail||{};
+    setStage('verdict');
+    if(manualKill && d.verdict==='clean'){
+      setCube('frozen','TERMINATED','manually killed by operator');
+    } else if(d.verdict==='contained'){
+      setCube('frozen','CONTAINED','payload stopped before it could act');
+    } else if(d.verdict==='clean'){
+      setCube('clean','CLEAN','payload finished — no violations');
+    } else {
+      setCube('','ERROR',ev.summary||'session error');
+    }
+    const st=d.stats||{};
+    let meta=(st.notifications||0)+' syscalls';
+    if(st.decide_us_p50!=null) meta+=' · p50 '+st.decide_us_p50+'µs';
+    $('#feedMeta').textContent=meta;
+    addRow(ev);
+    $('#run').disabled=false;
+    $('#kill').disabled=true;
+    return;
+  }
+  if(ev.kind==='error'){ addRow(ev); $('#run').disabled=false; }
+}
 
-          // Plot on SVG
-          document.getElementById("svg-anomaly-poly").classList.remove("hidden");
-          document.getElementById("svg-intercept-dot").classList.remove("hidden");
-          const textEl = document.getElementById("svg-intercept-text");
-          textEl.textContent = `INTERCEPT: ${ev.syscall} (${latStr})`;
-          textEl.classList.remove("hidden");
+function connect(){
+  ws=new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/ws');
+  ws.onopen=()=>{ $('#conn').textContent='● live'; $('#conn').className='pill-stat conn-indicator on'; };
+  ws.onclose=()=>{ $('#conn').textContent='○ disconnected'; $('#conn').className='pill-stat conn-indicator off';
+                   setTimeout(connect,1500); };
+  ws.onmessage=e=>{ try{ handle(JSON.parse(e.data)); }catch(_){} };
+}
 
-          appendFeedRow(ev);
-          renderStage(5);
-          return;
-        }
+async function init(){
+  const r=await fetch('/api/payloads'); const j=await r.json();
+  const ps=$('#payload');
+  j.payloads.forEach(p=>{
+    const o=document.createElement('option'); o.value=p.name; o.textContent=p.name; o.dataset.desc=p.summary||'';
+    ps.appendChild(o);
+  });
+  const pol=$('#policy');
+  j.policies.forEach(p=>{const o=document.createElement('option');o.value=p;o.textContent=p;pol.appendChild(o);});
+  const showDesc=()=>{ $('#pdesc').textContent=ps.selectedOptions[0]?.dataset.desc||''; };
+  ps.onchange=showDesc;
+  for(const o of ps.options){ if(o.value.includes('escape')){ o.selected=true; break; } }
+  showDesc();
+  connect();
+  loadSystemFooter();
+}
 
-        if (ev.kind === "run_end") {
-          sessionRunning = false;
-          const d = ev.detail || {};
-          const verdict = d.verdict || (isContained ? "contained" : "clean");
+$('#run').onclick=async()=>{
+  $('#run').disabled=true;
+  await fetch('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({payload:$('#payload').value,policy:$('#policy').value,net:$('#net').value})});
+};
+$('#kill').onclick=async()=>{
+  manualKill=true;
+  $('#kill').disabled=true;
+  await fetch('/api/kill',{method:'POST'});
+};
 
-          if (verdict === "contained") {
-            isContained = true;
-            document.getElementById("st6-badge").textContent = "CONTAINED";
-            document.getElementById("st6-badge").className = "font-mono text-[10px] px-1.5 py-0.5 rounded bg-tertiary text-on-tertiary font-bold tracking-wider";
-            document.getElementById("st6-title").textContent = "ZERO PERSISTENCE";
-            document.getElementById("st6-sub").textContent = "Target neutralized in-kernel";
-            conduit.style.width = "100%";
-          } else if (verdict === "clean") {
-            isClean = true;
-            document.getElementById("incident-verdict-badge").className = "font-mono text-[11px] bg-primary text-on-primary px-2 py-0.5 rounded uppercase font-bold";
-            document.getElementById("incident-verdict-badge").textContent = "CLEAN EXECUTION";
-            document.getElementById("incident-icon").textContent = "check_circle";
-            document.getElementById("st4-status").textContent = "PASS";
-            document.getElementById("st4-status").className = "font-mono text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary font-bold";
-            document.getElementById("st6-badge").textContent = "CLEAN";
-            document.getElementById("st6-badge").className = "font-mono text-[10px] px-1.5 py-0.5 rounded bg-primary text-on-primary font-bold tracking-wider";
-            document.getElementById("st6-title").textContent = "VERIFIED SECURE";
-            document.getElementById("st6-sub").textContent = "Passed all policy checks";
-            conduit.style.width = "100%";
-          }
-          appendFeedRow(ev);
-          renderStage(activeStageId);
-          return;
-        }
+/* ---- drag-and-drop upload ---- */
+const MAX=256*1024;
+const drop=$('#drop'), fileInput=$('#file');
+function busy(on){ drop.classList.toggle('busy',on); $('#run').disabled=on; }
 
-        appendFeedRow(ev);
-      }
+async function uploadFile(file){
+  if(!file) return;
+  if(file.size>MAX){ flashWarn('too big','file is '+Math.round(file.size/1024)+' KiB; limit is 256 KiB'); return; }
+  busy(true);
+  drop.querySelector('.main').textContent='checking '+file.name+'…';
+  const buf=await file.arrayBuffer();
+  const q=new URLSearchParams({policy:$('#policy').value,net:$('#net').value});
+  let r;
+  try{
+    r=await fetch('/api/upload?'+q.toString(),{method:'POST',
+      headers:{'Content-Type':'application/octet-stream','X-Filename':file.name}, body:buf});
+  }catch(e){ busy(false); return; }
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok){
+    busy(false);
+    drop.querySelector('.main').textContent='Drop a script here';
+    flashWarn('rejected', j.error||('upload failed ('+r.status+')'));
+  }
+}
+drop.onclick=()=>fileInput.click();
+fileInput.onchange=e=>{ uploadFile(e.target.files[0]); fileInput.value=''; };
+['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over');}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('over');}));
+drop.addEventListener('drop',e=>{ const f=e.dataTransfer.files&&e.dataTransfer.files[0]; if(f) uploadFile(f); });
+window.addEventListener('dragover',e=>e.preventDefault());
+window.addEventListener('drop',e=>e.preventDefault());
 
-      // Expose globally for native desktop Qt wrapper
-      window.cerberusReceiveEvent = handleEvent;
+const _origHandle=handle;
+handle=function(ev){
+  _origHandle(ev);
+  if(ev.kind==='run_end'||ev.kind==='error'){ busy(false); drop.querySelector('.main').textContent='Drop a script here'; }
+};
 
-      // --- WebSocket Connection ---
-      function connectWebSocket() {
-        const proto = location.protocol === "https:" ? "wss" : "ws";
-        ws = new WebSocket(`${proto}://${location.host}/ws`);
-        ws.onopen = () => console.log("Cerberus WebSocket connected");
-        ws.onclose = () => {
-          setTimeout(connectWebSocket, 1500);
-        };
-        ws.onmessage = (e) => {
-          try {
-            handleEvent(JSON.parse(e.data));
-          } catch (err) {
-            console.error("WS Parse error:", err);
-          }
-        };
-      }
+async function loadSystemFooter(){
+  try{
+    const r=await fetch('/api/system'); const s=await r.json();
+    $('#envInfo').textContent='NAMESPACES: '+s.namespaces.join('/').toUpperCase()+' · KERNEL ≥ '+s.kernel_min.split(' ')[0];
+    const m=$('#matrix');
+    m.innerHTML='';
+    const rows=[
+      ['LINUX NAMESPACES', s.namespaces.join(', ')],
+      ['STORAGE ROOT', s.storage_root],
+      ['CGROUP V2 LIMITS', 'mem.max='+s.cgroup.memory_max+'  pids.max='+s.cgroup.pids_max],
+      ['RUNS AS', s.run_as],
+      ['BYPASS-DENY SYSCALLS', s.syscall_tiers.bypass_deny.count+' (in-kernel EPERM)'],
+      ['ESCAPE-CLASS SYSCALLS', s.syscall_tiers.escape.count+' (parked → visible violation)'],
+    ];
+    rows.forEach(([k,v])=>{
+      const d=document.createElement('div'); d.className='item glass1';
+      d.innerHTML='<div class="k">'+k+'</div><div class="v">'+escapeHtml(v)+'</div>';
+      m.appendChild(d);
+    });
+  }catch(e){}
+}
 
-      // --- API Calls ---
-      async function runSample(payload) {
-        if (sessionRunning) return;
-        const policy = selPolicy.value;
-        const net = selNet.value;
-        const inVm = chkRunInVm.checked;
+/* ------------------------------------------------------------ timeline */
+let historyCache=[], tlFilter='all';
+async function loadHistory(){
+  try{
+    const r=await fetch('/api/history'); const j=await r.json();
+    historyCache=j.runs||[];
+    renderHistory();
+  }catch(e){}
+}
+function renderHistory(){
+  const all=historyCache.length;
+  const contained=historyCache.filter(x=>x.verdict==='contained').length;
+  const clean=historyCache.filter(x=>x.verdict==='clean').length;
+  $('#cntAll').textContent=all; $('#cntContained').textContent=contained; $('#cntClean').textContent=clean;
+  const list=$('#tlList');
+  const rows=historyCache.filter(x=> tlFilter==='all' || x.verdict===tlFilter);
+  if(!rows.length){ list.innerHTML='<div class="tl-empty">No runs yet — go to Analyze and execute a payload.</div>'; return; }
+  list.innerHTML='';
+  rows.forEach(run=>{
+    const el=document.createElement('div');
+    el.className='tl-item glass1';
+    const verdictClass = run.verdict==='contained'?'contained':(run.verdict==='clean'?'clean':'error');
+    el.innerHTML =
+      '<span class="node '+verdictClass+'"></span>'+
+      '<div class="info"><div class="fn">'+escapeHtml(run.filename)+'</div>'+
+      '<div class="meta">'+run.policy+' · '+run.net+' · '+(run.duration_s!=null?run.duration_s+'s':'')+' · '+run.source+'</div></div>'+
+      '<span class="verdict '+verdictClass+'">'+run.verdict+'</span>'+
+      '<span class="ts">'+new Date(run.ts*1000).toLocaleString()+'</span>';
+    el.onclick=()=>showRunDetail(run);
+    list.appendChild(el);
+  });
+}
+$$('#tlFilters .tl-chip').forEach(c=>{
+  c.onclick=()=>{
+    $$('#tlFilters .tl-chip').forEach(x=>x.classList.remove('active'));
+    c.classList.add('active'); tlFilter=c.dataset.filter; renderHistory();
+  };
+});
+function showRunDetail(run){
+  const el=$('#tlDetail');
+  el.classList.add('show');
+  const st=run.stats||{};
+  let html='<h3>'+escapeHtml(run.filename)+' <span style="color:var(--dim);font-weight:400;font-size:12px">— run '+run.id+'</span></h3>';
+  html+='<div class="grid">';
+  const stats=[
+    ['VERDICT', run.verdict], ['EXIT CODE', run.exit_code], ['FROZEN', run.frozen],
+    ['POLICY', run.policy], ['NETWORK', run.net], ['SOURCE', run.source],
+    ['BYTES', run.bytes], ['DURATION', run.duration_s+'s'],
+    ['SYSCALLS SEEN', st.notifications], ['ALLOWED', st.allowed],
+    ['WATCHED', st.suspicious], ['VIOLATIONS', st.violations],
+    ['DECIDE p50', st.decide_us_p50!=null?st.decide_us_p50+'µs':'—'],
+    ['DECIDE p99', st.decide_us_p99!=null?st.decide_us_p99+'µs':'—'],
+  ];
+  stats.forEach(([k,v])=>{
+    html+='<div class="stat"><div class="k">'+k+'</div><div class="v">'+escapeHtml(String(v))+'</div></div>';
+  });
+  html+='</div>';
+  if(run.first_violation){
+    const fv=run.first_violation;
+    html+='<div class="violation-box"><div class="rule">'+escapeHtml(fv.rule)+'</div>'+
+      '<div class="sm">'+escapeHtml(fv.summary)+' · syscall <b>'+escapeHtml(fv.syscall)+'</b> · '+
+      (fv.response_us!=null?fv.response_us+'µs to respond':'')+'</div></div>';
+  }
+  if(st.top_syscalls && st.top_syscalls.length){
+    html+='<div class="chip-row">'+st.top_syscalls.map(([n,c])=>'<span class="chip">'+n+' ×'+c+'</span>').join('')+'</div>';
+  }
+  el.innerHTML=html;
+  el.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
 
-        resetSession(payload);
-        document.getElementById("incident-verdict-badge").textContent = "STARTING…";
+/* ------------------------------------------------------------ architecture */
+let archLoaded=false;
+async function loadArchitecture(){
+  if(archLoaded) return;
+  try{
+    const r=await fetch('/api/system'); const s=await r.json();
+    archLoaded=true;
+    const t=s.syscall_tiers;
+    const tiers=[
+      ['bypass', 'Bypass-Deny', t.bypass_deny, 'Refused in-kernel with EPERM — reserved for the handful of syscalls whose only purpose is to defeat the monitor itself.'],
+      ['escape', 'Escape-Class', t.escape, 'Parked, judged, and turned into a visible freezing violation. An escape attempt is contained AND seen — never blocked silently.'],
+      ['notify', 'Notify (Judged)', t.notify, 'Parked and handed to the supervisor, which reads arguments from target memory (TOCTOU-safe) and judges them.'],
+      ['baseline', 'Baseline Allow', t.baseline_allow, 'The explicit, reviewable residual allow-set. Enforced strictly under the paranoid profile.'],
+    ];
+    const grid=$('#archTiers');
+    grid.innerHTML='';
+    tiers.forEach(([cls,label,data,desc])=>{
+      const names = data.names || data.sample || [];
+      const card=document.createElement('div');
+      card.className='card glass2 arch-card';
+      card.innerHTML =
+        '<h3>'+label+' <span class="tier-tag '+cls+'">'+cls+'</span></h3>'+
+        '<div class="count">'+data.count+'</div>'+
+        '<p>'+desc+'</p>'+
+        '<div class="chip-row">'+names.map(n=>'<span class="chip">'+n+'</span>').join('')+
+        (names.length<data.count?'<span class="chip">+'+(data.count-names.length)+' more</span>':'')+'</div>';
+      grid.appendChild(card);
+    });
 
-        try {
-          await fetch("/api/run", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ payload, policy, net, vm: inVm })
-          });
-        } catch (e) {
-          console.error("Run error:", e);
-        }
-      }
+    const iso=$('#archIsolation');
+    iso.innerHTML='';
+    const rows=[
+      ['Interception', s.interception],
+      ['Kernel minimum', s.kernel_min],
+      ['Namespaces', s.namespaces.join(', ')],
+      ['Storage root', s.storage_root],
+      ['Cgroup response', s.cgroup.response],
+      ['Runs as', s.run_as],
+      ['Read-only binds', s.read_only_binds.join(', ')],
+      ['Device nodes', s.device_nodes.join(', ')],
+      ['Sensitive path patterns', s.sensitive_patterns+' (always a violation, any prefix)'],
+    ];
+    rows.forEach(([k,v])=>{
+      const d=document.createElement('div'); d.className='item glass1';
+      d.innerHTML='<div class="k">'+k+'</div><div class="v">'+escapeHtml(v)+'</div>';
+      iso.appendChild(d);
+    });
 
-      async function uploadFile(file) {
-        if (!file || sessionRunning) return;
-        if (file.size > 256 * 1024) {
-          alert(`File is too large (${Math.round(file.size/1024)} KiB). Max allowed is 256 KiB.`);
-          return;
-        }
+    const tbl=$('#profilesTable');
+    let h='<tr><th>Profile</th><th>Network</th><th>Loopback</th><th>Exec</th><th>Unlisted syscalls</th><th>Max processes</th></tr>';
+    Object.entries(s.profiles).forEach(([name,p])=>{
+      h+='<tr><td><b>'+name+'</b></td>'+
+        '<td>'+(p.allow_network?'<span class="yes">allowed</span>':'<span class="no">denied</span>')+'</td>'+
+        '<td>'+(p.allow_loopback?'<span class="yes">allowed</span>':'<span class="no">denied</span>')+'</td>'+
+        '<td>'+(p.allow_exec?'<span class="yes">allowed</span>':'<span class="no">denied</span>')+'</td>'+
+        '<td>'+(p.default_allow_unlisted?'<span class="yes">allowed, logged</span>':'<span class="no">denied (strict allowlist)</span>')+'</td>'+
+        '<td>'+p.max_processes+'</td></tr>';
+    });
+    tbl.innerHTML=h;
+  }catch(e){}
+}
 
-        const policy = selPolicy.value;
-        const net = selNet.value;
-        const inVm = chkRunInVm.checked;
-
-        resetSession(file.name);
-        dropMainText.textContent = `Checking ${file.name}…`;
-
-        const buf = await file.arrayBuffer();
-        const q = new URLSearchParams({ policy, net, vm: inVm ? "1" : "0" });
-
-        try {
-          const res = await fetch(`/api/upload?${q.toString()}`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/octet-stream",
-              "X-Filename": file.name
-            },
-            body: buf
-          });
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({ error: "Upload failed" }));
-            alert(`Rejected: ${err.error || res.statusText}`);
-            dropMainText.textContent = "Drop script to check";
-          }
-        } catch (e) {
-          console.error("Upload error:", e);
-          dropMainText.textContent = "Drop script to check";
-        }
-      }
-
-      // --- Event Listeners ---
-      btnRunSample.addEventListener("click", () => {
-        runSample(selSample.value);
-      });
-
-      btnBrowse.addEventListener("click", (e) => {
-        e.stopPropagation();
-        fileInput.click();
-      });
-
-      dropZone.addEventListener("click", () => fileInput.click());
-
-      fileInput.addEventListener("change", (e) => {
-        if (e.target.files && e.target.files[0]) {
-          uploadFile(e.target.files[0]);
-          fileInput.value = "";
-        }
-      });
-
-      ["dragenter", "dragover"].forEach(evName => {
-        dropZone.addEventListener(evName, (e) => {
-          e.preventDefault();
-          dropZone.classList.add("drop-active");
-        });
-      });
-
-      ["dragleave", "drop"].forEach(evName => {
-        dropZone.addEventListener(evName, (e) => {
-          e.preventDefault();
-          dropZone.classList.remove("drop-active");
-        });
-      });
-
-      dropZone.addEventListener("drop", (e) => {
-        if (e.dataTransfer?.files?.length) {
-          uploadFile(e.dataTransfer.files[0]);
-        }
-      });
-
-      window.addEventListener("dragover", e => e.preventDefault());
-      window.addEventListener("drop", e => e.preventDefault());
-
-      // Actions
-      document.getElementById("btn-purge").addEventListener("click", () => {
-        resetSession("ingress_payload.py");
-      });
-
-      document.getElementById("btn-export-json").addEventListener("click", () => {
-        const payload = {
-          sessionId: currentSessionId,
-          target: currentFilename,
-          verdict: isContained ? "contained" : (isClean ? "clean" : "idle"),
-          eventsSeen: eventCount,
-          violations: violationCount,
-          violationDetail,
-          events: sessionEvents
-        };
-        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = `cerberus_forensic_${currentSessionId}.json`;
-        a.click();
-      });
-
-      document.getElementById("btn-export-trace").addEventListener("click", () => {
-        const lines = sessionEvents.map(e => `[${e.ts || ""}] ${e.syscall || e.kind}: ${e.summary || ""} (${e.latency_us ? e.latency_us + "us" : ""})`);
-        const blob = new Blob([lines.join("\n")], { type: "text/plain" });
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = `cerberus_trace_${currentSessionId}.log`;
-        a.click();
-      });
-
-      // Navigation Tabs
-      document.querySelectorAll(".nav-tab").forEach(tab => {
-        tab.addEventListener("click", () => {
-          document.querySelectorAll(".nav-tab").forEach(t => {
-            t.className = "nav-tab font-mono text-[11px] uppercase px-4 py-1.5 rounded-full text-on-surface-variant hover:bg-surface-container-high transition-all";
-          });
-          tab.className = "nav-tab font-mono text-[11px] uppercase px-4 py-1.5 rounded-full bg-primary-container text-on-primary-container font-semibold shadow-[0_2px_8px_rgba(0,97,148,0.18)] transition-all";
-        });
-      });
-
-      // Load Payloads List
-      async function loadPayloads() {
-        try {
-          const r = await fetch("/api/payloads");
-          if (r.ok) {
-            const j = await r.json();
-            if (j.payloads && j.payloads.length) {
-              selSample.innerHTML = "";
-              j.payloads.forEach(p => {
-                const opt = document.createElement("option");
-                opt.value = p.name;
-                opt.textContent = p.name;
-                selSample.appendChild(opt);
-              });
-              for (const opt of selSample.options) {
-                if (opt.value.includes("exfil")) { opt.selected = true; break; }
-              }
-            }
-          }
-        } catch (e) {}
-      }
-
-      // Initialize
-      resetSession("ingress_payload.py");
-      updateVmBadge();
-      connectWebSocket();
-      loadPayloads();
-    })();
-  </script>
+init();
+</script>
 </body>
 </html>

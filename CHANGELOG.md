@@ -11,6 +11,49 @@ is shown in the app window header and the `run-native.sh` startup line.
 
 - Nothing yet.
 
+## [0.7.0] — 2026-09-19
+
+The web dashboard, redesigned. "Architectural Glassmorphism" — light,
+translucent, isometric — replacing the earlier dark terminal-style UI. Every
+number on the page is still produced by a real sandbox run; nothing is
+mocked or hand-typed.
+
+### Added
+- **Live isometric enclave cube** (pure CSS 3D, no three.js/WebGL): idle,
+  spins while a payload runs, freezes red on containment, settles green on a
+  clean exit — driven entirely by real WebSocket events, not decoration.
+- **6-stage runtime pipeline stepper** (Upload → Isolate → Observe → Detect →
+  Contain → Verdict), advanced by the actual lifecycle/violation/run-end
+  events the monitor already emits. The stage marker is monotonic within a
+  run (a fast CONTAINED that lands before a deliberately-staggered cosmetic
+  transition can no longer stomp the finished verdict back to an earlier
+  stage — a real race the first build of this UI had).
+- **Timeline & History** tab: every run this dashboard has executed, newest
+  first, with a click-to-expand forensic detail panel (verdict, stats,
+  first-violation rule/summary, top syscalls) — all real, kept in memory for
+  the life of the server process (`cerberus/web.py`'s new `/api/history`).
+  Nothing persists to disk, matching the rest of the project's ephemeral
+  design.
+- **Architecture & System** tab: reads `/api/system`, which is generated
+  live from `cerberus/policy.py` and `cerberus/sandbox.py` — syscall tier
+  counts (bypass-deny / escape / notify / baseline-allow) with real syscall
+  names, namespaces, cgroup limits, and the actual `PROFILES` table. These
+  figures can never drift from what the monitor enforces, because they're
+  read from the same objects that enforce it.
+- **Manual Kill Process**: a real operator control, not a decoration. Reaches
+  into the active `Session`'s actual `Cgroup` and calls the same
+  `cgroup.kill()` the monitor itself uses for teardown (`/api/kill`).
+- Terminology correction: the interception mechanism is labelled
+  **seccomp user-notification** throughout (not "eBPF"/"kprobe", which
+  Cerberus does not use) — accurate under a judge's technical question.
+
+### Fixed
+- A cosmetic 120ms-delayed stage transition (DETECT → CONTAIN) could arrive
+  at the browser *after* the real run-end verdict on a very fast containment
+  (sub-millisecond), silently reverting the pipeline stepper from VERDICT
+  back to CONTAIN. Fixed with a monotonic stage guard (`setStage` only moves
+  forward within a run).
+
 ## [0.6.0] — 2026-09-19
 
 Escape attempts are now visible.
@@ -153,10 +196,12 @@ Initial working build for VinHack 2026 (Trust, Safety & Digital Security).
 - Dependency-free **web dashboard** (HTTP + WebSocket), CLI, four villain
   payloads and a benign control, smoke + integration tests.
 
-[Unreleased]: https://github.com/Sashwiin/cerberus-linux/compare/v0.6.0...HEAD
-[0.6.0]: https://github.com/Sashwiin/cerberus-linux/releases/tag/v0.6.0
-[0.5.0]: https://github.com/Sashwiin/cerberus-linux/releases/tag/v0.5.0
-[0.4.0]: https://github.com/Sashwiin/cerberus-linux/releases/tag/v0.4.0
-[0.3.0]: https://github.com/Sashwiin/cerberus-linux/releases/tag/v0.3.0
-[0.2.0]: https://github.com/Sashwiin/cerberus-linux/releases/tag/v0.2.0
-[0.1.0]: https://github.com/Sashwiin/cerberus-linux/releases/tag/v0.1.0
+<!-- Replace <REPO> with your GitHub URL, e.g. https://github.com/you/cerberus -->
+[Unreleased]: https://github.com/<REPO>/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/<REPO>/releases/tag/v0.7.0
+[0.6.0]: https://github.com/<REPO>/releases/tag/v0.6.0
+[0.5.0]: https://github.com/<REPO>/releases/tag/v0.5.0
+[0.4.0]: https://github.com/<REPO>/releases/tag/v0.4.0
+[0.3.0]: https://github.com/<REPO>/releases/tag/v0.3.0
+[0.2.0]: https://github.com/<REPO>/releases/tag/v0.2.0
+[0.1.0]: https://github.com/<REPO>/releases/tag/v0.1.0

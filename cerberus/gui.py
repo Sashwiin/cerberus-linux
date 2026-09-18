@@ -600,12 +600,6 @@ def _which(name: str) -> bool:
 
 
 def main() -> int:
-    if "--tk" not in sys.argv:
-        try:
-            from . import gui_qt
-            return gui_qt.main()
-        except ImportError:
-            pass
     root = tk.Tk()
     # dark title area where the WM honours it
     try:
