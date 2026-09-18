@@ -1,0 +1,5 @@
+# Cerberus runtime dependencies: NONE.
+# The tool uses only the Python standard library and Linux kernel features.
+#
+# Optional, for regenerating the dashboard screenshot in docs/ only:
+# playwright>=1.40

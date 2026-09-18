@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# Cerberus AppImage launcher.
+#
+# The problem this solves: Cerberus needs root (mount, cgroup v2, seccomp), but
+# a double-clicked AppImage runs as your normal user, and the browser must open
+# in YOUR session, not root's. So we split the privilege exactly where it
+# belongs: the sandbox SERVER is elevated with pkexec (one graphical password
+# prompt), while the browser is opened as you. They meet over 127.0.0.1.
+#
+# A second wrinkle: an AppImage's mount is private to the user who mounted it,
+# so a root process can't read it. We stage the bundle to a world-readable temp
+# dir once, and the elevated server runs from there.
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+APPDIR="${APPDIR:-$HERE}"
+PYVER="$(cd "$APPDIR/usr/lib" && ls -d python3.* 2>/dev/null | head -1)"
+PORT="${CERBERUS_PORT:-8787}"
+URL="http://127.0.0.1:${PORT}"
+
+log(){ printf '\033[1;35m[cerberus]\033[0m %s\n' "$*" >&2; }
+
+# --- staging: a root-readable copy of the bundle ----------------------------
+# Keyed by the AppImage's own mtime so re-launches of the same build are fast
+# and a new build re-stages automatically.
+STAMP="$( { stat -c %Y "${APPIMAGE:-$APPDIR}" 2>/dev/null || echo 0; } )"
+STAGE="/tmp/cerberus-app-${STAMP}"
+if [ ! -f "$STAGE/.ready" ]; then
+  log "preparing runtime..."
+  rm -rf "$STAGE"
+  mkdir -p "$STAGE"
+  cp -a "$APPDIR/usr" "$STAGE/usr"
+  chmod -R a+rX "$STAGE"
+  touch "$STAGE/.ready"
+fi
+
+PYHOME="$STAGE/usr"
+PYEXE="$STAGE/usr/bin/python3"
+APPCODE="$STAGE/usr/share/cerberus"
+
+server_cmd=(
+  env
+  "PYTHONHOME=$PYHOME"
+  "PYTHONPATH=$APPCODE"
+  "LD_LIBRARY_PATH=$STAGE/usr/lib"
+  "PYTHONDONTWRITEBYTECODE=1"
+  "$PYEXE" -m cerberus.web --host 127.0.0.1 --port "$PORT"
+)
+
+# --- start the elevated server ----------------------------------------------
+already_up(){ (exec 3<>"/dev/tcp/127.0.0.1/$PORT") 2>/dev/null; }
+
+if already_up; then
+  log "server already running on $URL"
+else
+  if [ "$(id -u)" -eq 0 ]; then
+    log "starting server (already root)"
+    "${server_cmd[@]}" &
+  elif command -v pkexec >/dev/null 2>&1 && [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+    log "requesting privileges (a password prompt will appear)..."
+    pkexec "${server_cmd[@]}" &
+  elif command -v sudo >/dev/null 2>&1; then
+    log "elevating with sudo (enter your password in this terminal)..."
+    sudo "${server_cmd[@]}" &
+  else
+    log "ERROR: need root and found neither pkexec nor sudo."
+    log "Run this AppImage from a terminal with: sudo $0"
+    exit 1
+  fi
+fi
+
+# --- wait for the server, then open the browser as the user ------------------
+log "waiting for the dashboard..."
+for _ in $(seq 1 100); do
+  already_up && break
+  sleep 0.1
+done
+if already_up; then
+  log "dashboard is live at $URL"
+  if command -v xdg-open >/dev/null 2>&1; then xdg-open "$URL" >/dev/null 2>&1 &
+  elif command -v gio >/dev/null 2>&1; then gio open "$URL" >/dev/null 2>&1 &
+  else log "open $URL in your browser"; fi
+else
+  log "server did not come up; check the password prompt or run with sudo."
+  exit 1
+fi
+
+log "Cerberus is running. Close this window (or Ctrl-C) to stop."
+# Keep the launcher alive so closing it can tear the server down.
+cleanup(){
+  log "shutting down..."
+  if [ "$(id -u)" -eq 0 ]; then pkill -f "cerberus.web" 2>/dev/null || true
+  elif command -v pkexec >/dev/null 2>&1; then pkexec pkill -f "cerberus.web" 2>/dev/null || true
+  else sudo pkill -f "cerberus.web" 2>/dev/null || true; fi
+}
+trap cleanup EXIT INT TERM
+wait
