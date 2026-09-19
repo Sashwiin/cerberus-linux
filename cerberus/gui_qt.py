@@ -224,7 +224,7 @@ class CerberusMainWindow(QtWidgets.QMainWindow):
         self.vm_image = "ubuntu"
         self._vm_phase = "off"  # off | booting | live
 
-        self.setWindowTitle("Cerberus")
+        self.setWindowTitle(f"Cerberus v{__version__}")
         self.resize(1180, 760)
         self.setMinimumSize(920, 600)
 
@@ -265,12 +265,26 @@ class CerberusMainWindow(QtWidgets.QMainWindow):
         lay.addWidget(mark)
 
         title_box = QtWidgets.QVBoxLayout()
-        title_box.setSpacing(0)
-        title = QtWidgets.QLabel("Cerberus")
-        title.setStyleSheet(f"color:{INK}; font-family:{DISPLAY_FAMILY}; font-size:14pt; font-weight:700; background:transparent;")
-        title_box.addWidget(title)
-        sub = QtWidgets.QLabel(f"ephemeral sandbox · real-time syscall defense · v{__version__}")
-        sub.setStyleSheet(f"color:{DIM}; font-size:9pt; background:transparent;")
+        title_box.setSpacing(1)
+        name_row = QtWidgets.QHBoxLayout()
+        name_row.setSpacing(8)
+        title = QtWidgets.QLabel("CERBERUS")
+        title.setStyleSheet(f"color:{INK}; font-family:{DISPLAY_FAMILY}; font-size:14pt; font-weight:700; "
+                            "letter-spacing:1px; background:transparent;")
+        name_row.addWidget(title)
+        runtime_tag = QtWidgets.QLabel("RUNTIME DEFENSE")
+        runtime_tag.setStyleSheet(
+            f"background:#e6edff; color:{INFO}; font-family:{MONO_FAMILY}; font-size:7.5pt; font-weight:600; "
+            "letter-spacing:.5px; border-radius:4px; padding:2px 7px;"
+        )
+        name_row.addWidget(runtime_tag)
+        name_row.addStretch(1)
+        name_row_w = QtWidgets.QWidget()
+        name_row_w.setLayout(name_row)
+        title_box.addWidget(name_row_w)
+        sub = QtWidgets.QLabel("EXECUTE · OBSERVE · CONTAIN")
+        sub.setStyleSheet(f"color:{FAINT}; font-family:{MONO_FAMILY}; font-size:7.5pt; letter-spacing:1.5px; "
+                          "background:transparent;")
         title_box.addWidget(sub)
         wrap = QtWidgets.QWidget()
         wrap.setLayout(title_box)
@@ -312,15 +326,30 @@ class CerberusMainWindow(QtWidgets.QMainWindow):
         outer.setContentsMargins(16, 16, 16, 16)
         outer.setSpacing(16)
 
-        # ---- sidebar --------------------------------------------------
-        side = QtWidgets.QWidget()
+        # ---- sidebar: one "Test Enclave" card, same chrome as the web
+        # dashboard's identically-named card (icon + title + SPEC tag) -----
+        side = QtWidgets.QFrame()
         side.setFixedWidth(300)
+        side.setStyleSheet(f"QFrame {{ background:{PANEL}; border:1px solid {LINE}; border-radius:10px; }}")
         sl = QtWidgets.QVBoxLayout(side)
-        sl.setContentsMargins(0, 0, 0, 0)
+        sl.setContentsMargins(16, 16, 16, 16)
+
+        card_hdr = QtWidgets.QHBoxLayout()
+        hdr_title = QtWidgets.QLabel("\U0001f9ea  Test Enclave")
+        hdr_title.setStyleSheet(f"color:{INK}; font-family:{DISPLAY_FAMILY}; font-size:11pt; "
+                                "font-weight:700; border:none;")
+        card_hdr.addWidget(hdr_title)
+        card_hdr.addStretch(1)
+        hdr_stamp = QtWidgets.QLabel("SPEC::SAND-01")
+        hdr_stamp.setStyleSheet(f"color:{FAINT}; font-family:{MONO_FAMILY}; font-size:7.5pt; "
+                                "letter-spacing:.5px; border:none;")
+        card_hdr.addWidget(hdr_stamp)
+        sl.addLayout(card_hdr)
 
         def caption(txt):
             lab = QtWidgets.QLabel(txt)
-            lab.setStyleSheet(f"color:{FAINT}; font-size:8pt; font-weight:700; margin-top:10px;")
+            lab.setStyleSheet(f"color:{FAINT}; font-family:{MONO_FAMILY}; font-size:7.5pt; "
+                              "font-weight:600; letter-spacing:.5px; margin-top:10px; border:none;")
             sl.addWidget(lab)
 
         caption("CHECK A FILE")
@@ -346,13 +375,14 @@ class CerberusMainWindow(QtWidgets.QMainWindow):
         vm_note.setStyleSheet(f"color:{FAINT}; font-size:8pt; margin-bottom:6px;")
         sl.addWidget(vm_note)
 
-        caption("OR TRY A BUNDLED SAMPLE")
+        caption("OR SELECT A BUNDLED SAMPLE")
         self.sample = QtWidgets.QComboBox()
         samples = [f for f in sorted(os.listdir(PAYLOAD_DIR))
                    if f.endswith(".py")] if os.path.isdir(PAYLOAD_DIR) else []
         self.sample.addItems(samples)
         sl.addWidget(self.sample)
-        run_btn = QtWidgets.QPushButton("▶  Run sample")
+        run_btn = QtWidgets.QPushButton("▶  Execute Runtime Cycle")
+        run_btn.setObjectName("primary")
         run_btn.clicked.connect(self.run_sample)
         sl.addWidget(run_btn)
 
