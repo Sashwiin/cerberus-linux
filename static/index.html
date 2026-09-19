@@ -158,6 +158,17 @@ button.btn:disabled{opacity:.5;cursor:not-allowed}
 .legend b{color:var(--dim);font-weight:600;text-transform:uppercase}
 .blurb{font-size:11px;color:var(--faint);margin-top:16px;line-height:1.6}
 
+/* disposable-VM toggle -- same control + copy as the native app's sidebar,
+   so the two front ends offer identical capability, not a subset. */
+.vm-toggle{display:flex;align-items:center;gap:9px;margin-top:18px;cursor:pointer;user-select:none}
+.vm-toggle input{width:15px;height:15px;accent-color:var(--cyan);cursor:pointer;flex:none}
+.vm-toggle span{font-size:12.5px;color:var(--ink);font-weight:600}
+.vm-note{font-size:10.5px;color:var(--faint);margin-top:4px;line-height:1.5}
+.pill-stat.vm-local b{color:var(--cyan)}
+.pill-stat.vm-live b{color:var(--green)}
+.pill-stat.vm-booting b{color:var(--amber)}
+.pill-stat.vm-off b{color:var(--faint)}
+
 /* ------------------------------------------------------------- centre */
 .centre-col{display:flex;flex-direction:column;gap:16px}
 .cube-card{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:36px 18px;min-height:340px}
@@ -373,6 +384,7 @@ button.btn:disabled{opacity:.5;cursor:not-allowed}
     <div class="status-pills">
       <div class="pill-stat"><span class="dot cyan pulse" id="sandboxDot"></span>SANDBOX: <b id="sandboxState">IDLE</b></div>
       <div class="pill-stat">ISOLATION: <b>TMPFS</b></div>
+      <div class="pill-stat vm-local" id="vmPill"><b id="vmState">LOCAL SANDBOX</b></div>
       <div class="pill-stat conn-indicator" id="conn">○ disconnected</div>
     </div>
   </div>
@@ -434,6 +446,12 @@ button.btn:disabled{opacity:.5;cursor:not-allowed}
         <option value="none">none (isolated netns)</option>
         <option value="host">host</option>
       </select>
+
+      <label class="vm-toggle">
+        <input type="checkbox" id="vmToggle">
+        <span>Run in disposable VM</span>
+      </label>
+      <div class="vm-note">kernel-escape isolation · needs qemu · slower boot</div>
 
       <label class="field-label" style="margin-top:20px">Or select a bundled sample</label>
       <select id="payload"></select>
@@ -688,12 +706,29 @@ function flashWarn(title,desc){
   $('#bLat').textContent=''; $('#bLatWho').textContent='';
 }
 
+/* ---- disposable-VM mode: same badge text/states as the native app ---- */
+let vmMode=false, vmPhase='off';
+function refreshVmBadge(){
+  const pill=$('#vmPill'), st=$('#vmState');
+  let text, cls;
+  if(!vmMode){ text='LOCAL SANDBOX'; cls='vm-local'; }
+  else if(vmPhase==='live'){ text='DISPOSABLE VM · LIVE'; cls='vm-live'; }
+  else if(vmPhase==='booting'){ text='DISPOSABLE VM · BOOTING…'; cls='vm-booting'; }
+  else { text='DISPOSABLE VM · off (boots on run)'; cls='vm-off'; }
+  st.textContent=text;
+  pill.className='pill-stat '+cls;
+}
+$('#vmToggle').onchange=()=>{ vmMode=$('#vmToggle').checked; refreshVmBadge(); };
+
 function handle(ev){
+  if(ev.kind==='vm_phase'){ vmPhase=ev.phase||'off'; refreshVmBadge(); return; }
+  if(ev.kind==='vm_status'){ addRow({kind:'lifecycle',summary:'[vm] '+(ev.summary||'')}); return; }
+  if(ev.kind==='vm_console'){ addRow({kind:'lifecycle',summary:'[vm console] '+(ev.summary||'')}); return; }
   if(ev.kind==='run_start'){
     resetRun();
     const d=ev.detail||{};
     $('#workloadLabel').textContent=(d.filename||'payload')+(d.source?' ('+d.source+')':'');
-    setCube('running','RUNNING','payload executing under monitor');
+    setCube('running','RUNNING', vmMode ? 'payload executing in disposable VM' : 'payload executing under monitor');
     addRow(ev);
     return;
   }
@@ -770,7 +805,7 @@ async function init(){
 $('#run').onclick=async()=>{
   $('#run').disabled=true;
   await fetch('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({payload:$('#payload').value,policy:$('#policy').value,net:$('#net').value})});
+    body:JSON.stringify({payload:$('#payload').value,policy:$('#policy').value,net:$('#net').value,vm:vmMode})});
 };
 $('#kill').onclick=async()=>{
   manualKill=true;
@@ -789,7 +824,7 @@ async function uploadFile(file){
   busy(true);
   drop.querySelector('.main').textContent='checking '+file.name+'…';
   const buf=await file.arrayBuffer();
-  const q=new URLSearchParams({policy:$('#policy').value,net:$('#net').value});
+  const q=new URLSearchParams({policy:$('#policy').value,net:$('#net').value,vm:vmMode?'1':'0'});
   let r;
   try{
     r=await fetch('/api/upload?'+q.toString(),{method:'POST',

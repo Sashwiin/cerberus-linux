@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
-# Launch the native Cerberus desktop app (Qt window, no browser).
+# Launch the native Cerberus desktop app: the real web dashboard, rendered
+# in a native Qt window (QWebEngineView) -- no browser tab, no address bar.
 #
-# The GUI runs as your normal user; when you check a file it elevates ONLY the
-# sandbox helper via pkexec (or sudo), so the window stays in your session.
+# The window itself runs as your normal user. It elevates only the sandbox
+# SERVER (cerberus.web) via pkexec (or sudo) as a separate subprocess, the
+# same split packaging/AppRun (the AppImage launcher) already uses, then
+# points its browser view at that server on 127.0.0.1.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
-# PyQt5 isn't in the stdlib; some distros split it into its own package.
+# PyQt5 isn't in the stdlib; some distros split it into its own package, and
+# the WebEngine (Chromium-based) view is its own package again.
 if ! python3 -c 'import PyQt5.QtWidgets' 2>/dev/null; then
   echo "Cerberus needs PyQt5. Install it:"
   echo "  Debian/Ubuntu/Mint : sudo apt install python3-pyqt5"
@@ -15,10 +19,19 @@ if ! python3 -c 'import PyQt5.QtWidgets' 2>/dev/null; then
   echo "  otherwise          : pip install PyQt5"
   exit 1
 fi
+if ! python3 -c 'import PyQt5.QtWebEngineWidgets' 2>/dev/null; then
+  echo "Cerberus needs PyQtWebEngine (the window renders the dashboard's own"
+  echo "HTML/CSS, not a hand-built copy of it). Install it:"
+  echo "  Debian/Ubuntu/Mint : sudo apt install python3-pyqt5.qtwebengine"
+  echo "  Fedora             : sudo dnf install python3-qt5-webengine"
+  echo "  Arch               : sudo pacman -S python-pyqtwebengine"
+  echo "  otherwise          : pip install PyQtWebEngine"
+  exit 1
+fi
 
-# pkexec (graphical) is used at run time for the sandbox helper; warn if absent.
+# pkexec (graphical) is used at run time to elevate the sandbox server; warn if absent.
 if ! command -v pkexec >/dev/null 2>&1 && ! command -v sudo >/dev/null 2>&1; then
-  echo "warning: neither pkexec nor sudo found; the sandbox helper needs root." >&2
+  echo "warning: neither pkexec nor sudo found; the sandbox server needs root." >&2
 fi
 
 cd "$HERE"

@@ -27,14 +27,13 @@ import uuid
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from . import introspect
+from . import vm as vmmod
+from . import wsclient
 from .events import EventBus
-from .policy import (
-    BYPASS_DENY_NAMES, ESCAPE_NAMES, NOTIFY_NAMES, BASELINE_ALLOW_NAMES,
-    DEFAULT_READ_PREFIXES, DEFAULT_WRITE_PREFIXES, SENSITIVE_PATTERNS,
-    PROFILES, get_profile,
-)
+from .policy import PROFILES, get_profile
 from .runner import Session
-from .sandbox import SandboxSpec, DEFAULT_BINDS, DEVICE_NODES
+from .sandbox import SandboxSpec
 
 WS_MAGIC = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -93,9 +92,24 @@ class DashboardState:
         self.history: deque[dict] = deque(maxlen=40)
         self._history_lock = threading.Lock()
         # The Session currently in flight, if any -- lets the "manual kill"
-        # control reach its real cgroup rather than faking a response.
+        # control reach its real cgroup rather than faking a response. Only
+        # ever set for a LOCAL run; a VM run's sandbox lives inside the VM's
+        # own cerberus.web process, out of this process's reach, so "manual
+        # kill" is a local-only control (same limitation the native Qt app
+        # already had -- it never exposed one for VM mode either).
         self._active_session: Session | None = None
         self._active_lock = threading.Lock()
+
+        # Disposable-VM state -- same two-boundaries-deep path the native
+        # app's "Run in disposable VM" checkbox drives, just reached over
+        # HTTP/WebSocket (cerberus.wsclient) instead of in-process. The VM,
+        # once booted, is reused for subsequent VM runs until this server
+        # process exits.
+        self._vm = None
+        self._vm_lock = threading.Lock()
+        self._vm_phase = "off"  # off | booting | live
+        self._vm_port = 8799
+        self.vm_image = "ubuntu"
 
     # --------------------------------------------------------- validation
 
@@ -186,60 +200,10 @@ class DashboardState:
             return list(reversed(self.history))  # newest first
 
     def system_info(self) -> dict:
-        """Real architecture facts, pulled from the live policy/sandbox modules
-        rather than written out by hand -- so this can never drift from what the
-        monitor actually enforces."""
-        spec = SandboxSpec(argv=[])
-        return {
-            "interception": "seccomp user-notification (SECCOMP_RET_USER_NOTIF)",
-            "kernel_min": "5.14 (cgroup.kill); 5.9+ with a weaker teardown",
-            "namespaces": ["mount", "pid", "net", "ipc", "uts", "cgroup"],
-            "storage_root": f"tmpfs, RAM only ({spec.tmpfs_size})",
-            "cgroup": {
-                "version": "v2",
-                "memory_max": spec.memory_max,
-                "pids_max": spec.pids_max,
-                "response": "cgroup.freeze (stasis) / cgroup.kill (atomic teardown)",
-            },
-            "run_as": f"uid {spec.uid} / gid {spec.gid} (unprivileged)",
-            "read_only_binds": list(DEFAULT_BINDS),
-            "device_nodes": list(DEVICE_NODES),
-            "syscall_tiers": {
-                "bypass_deny": {
-                    "count": len(BYPASS_DENY_NAMES),
-                    "names": list(BYPASS_DENY_NAMES),
-                    "action": "refused in-kernel (EPERM), no userspace round trip",
-                },
-                "escape": {
-                    "count": len(ESCAPE_NAMES),
-                    "sample": list(ESCAPE_NAMES[:8]),
-                    "action": "parked, judged, and turned into a visible freezing "
-                              "violation (CONTAINED) -- never blocked silently",
-                },
-                "notify": {
-                    "count": len(NOTIFY_NAMES),
-                    "action": "parked and judged on arguments",
-                },
-                "baseline_allow": {
-                    "count": len(BASELINE_ALLOW_NAMES),
-                    "action": "explicit reviewable allow-list (enforced by "
-                              "'paranoid'; informative for other profiles)",
-                },
-            },
-            "read_prefixes": list(DEFAULT_READ_PREFIXES),
-            "write_prefixes": list(DEFAULT_WRITE_PREFIXES),
-            "sensitive_patterns": len(SENSITIVE_PATTERNS),
-            "profiles": {
-                name: {
-                    "allow_network": p.allow_network,
-                    "allow_loopback": p.allow_loopback,
-                    "allow_exec": p.allow_exec,
-                    "default_allow_unlisted": p.default_allow_unlisted,
-                    "max_processes": p.max_processes,
-                }
-                for name, p in PROFILES.items()
-            },
-        }
+        """Real architecture facts. See `cerberus.introspect.system_info` --
+        the native Qt app's Architecture & System panel calls the very same
+        function, so the two front ends can never show different numbers."""
+        return introspect.system_info()
 
     def list_payloads(self) -> list[dict]:
         out = []
@@ -254,7 +218,8 @@ class DashboardState:
             out.append({"name": fn, "summary": doc})
         return out
 
-    def run_sample(self, payload: str, policy_name: str, net: str) -> None:
+    def run_sample(self, payload: str, policy_name: str, net: str,
+                   vm: bool = False) -> None:
         """Run one of the bundled demo payloads by name."""
         path = os.path.join(PAYLOAD_DIR, os.path.basename(payload))
         if not os.path.isfile(path):
@@ -263,15 +228,23 @@ class DashboardState:
         with open(path, "rb") as fh:
             data = fh.read()
         self.run_session(os.path.basename(payload), data, ["python3"],
-                         policy_name, net, source="sample")
+                         policy_name, net, source="sample", vm=vm)
 
     def run_session(self, filename: str, data: bytes, interp: list[str],
-                    policy_name: str, net: str, source: str = "upload") -> None:
+                    policy_name: str, net: str, source: str = "upload",
+                    vm: bool = False) -> None:
         if self.running:
             self.broadcast({"kind": "error",
                             "summary": "a session is already running"})
             return
         self.running = True
+
+        if vm:
+            try:
+                self._run_vm(filename, data, policy_name, net, source)
+            finally:
+                self.running = False
+            return
 
         bus = EventBus(history=1000)
         q = bus.subscribe()
@@ -337,6 +310,104 @@ class DashboardState:
             with self._active_lock:
                 self._active_session = None
 
+    # ------------------------------------------------------- disposable VM
+
+    def _set_vm_phase(self, phase: str) -> None:
+        self._vm_phase = phase
+        self.broadcast({"kind": "vm_phase", "phase": phase})
+
+    def _start_vm_console_reader(self, handle) -> None:
+        """Stream the VM's serial console (kernel + cloud-init boot log) into
+        the same feed the browser already renders, one line at a time."""
+        def reader():
+            try:
+                for line in handle.proc.stdout:
+                    line = line.rstrip("\n")
+                    if line.strip():
+                        self.broadcast({"kind": "vm_console", "summary": line})
+            except Exception:
+                pass
+        threading.Thread(target=reader, daemon=True).start()
+
+    def _run_vm(self, filename: str, data: bytes, policy_name: str, net: str,
+               source: str) -> None:
+        """Run two boundaries deep: boot (or reuse) a disposable VM, then
+        drive its own cerberus.web server over HTTP/WebSocket exactly the way
+        `cerberus.wsclient` was already built to for the native app -- this
+        just relays the same events into *this* server's browser clients
+        instead of into native widgets."""
+        host, port = "127.0.0.1", self._vm_port
+        started_at = time.time()
+        self.broadcast({
+            "kind": "run_start",
+            "summary": f"launching {filename} ({source}, in disposable VM)",
+            "detail": {"policy": policy_name, "net": net, "filename": filename,
+                       "source": source, "bytes": len(data),
+                       "uid": "65534 (unprivileged)", "vm": True},
+        })
+        try:
+            with self._vm_lock:
+                need_boot = self._vm is None or not self._vm.is_running()
+            if need_boot:
+                self._set_vm_phase("booting")
+
+                def status(msg):
+                    self.broadcast({"kind": "vm_status", "summary": msg})
+
+                status("preparing disposable VM…")
+                handle = vmmod.spawn_vm(port=port, image=self.vm_image, progress=status)
+                with self._vm_lock:
+                    self._vm = handle
+                self._start_vm_console_reader(handle)
+                status("waiting for the VM to finish booting…")
+                if not wsclient.wait_up(host, port, timeout=240):
+                    self._set_vm_phase("off")
+                    self.broadcast({"kind": "error",
+                                    "summary": "VM booted but the dashboard never came "
+                                               "up — see the vm console lines above"})
+                    self.broadcast({"kind": "run_end", "severity": "info",
+                                    "summary": "session error",
+                                    "detail": {"verdict": "error"}})
+                    return
+                self._set_vm_phase("live")
+                status("VM up — sandbox runs two boundaries deep")
+            else:
+                self._set_vm_phase("live")
+
+            events = wsclient.WSEvents(host, port)
+            events.connect()
+            wsclient.upload(host, port, filename, data, policy=policy_name, net=net)
+            detail = None
+            for ev in events:
+                self.broadcast(ev)
+                if ev.get("kind") == "run_end":
+                    detail = ev.get("detail") or {}
+                    break
+            events.close()
+
+            if detail is not None:
+                self.session_summary = detail
+                with self._history_lock:
+                    self.history.append({
+                        "id": uuid.uuid4().hex[:8], "ts": started_at,
+                        "filename": filename, "source": source,
+                        "policy": policy_name, "net": net, "bytes": len(data),
+                        "vm": True, **detail,
+                    })
+        except Exception as exc:
+            # If the VM never reached "live" (spawn_vm() itself raised, e.g.
+            # QEMU isn't installed), the badge must not get stuck on
+            # "BOOTING..." forever -- drop back to "off". A failure *after*
+            # a VM was already live (upload/event-stream hiccup) leaves the
+            # phase alone, since the VM itself may still be fine.
+            with self._vm_lock:
+                still_booting = self._vm_phase == "booting"
+            if still_booting:
+                self._set_vm_phase("off")
+            self.broadcast({"kind": "error", "summary": f"VM run failed: {exc}"})
+            self.broadcast({"kind": "run_end", "severity": "info",
+                            "summary": "session error", "detail": {"verdict": "error"}})
+
 
 def make_handler(state: DashboardState):
     class Handler(BaseHTTPRequestHandler):
@@ -388,11 +459,12 @@ def make_handler(state: DashboardState):
                 payload = body.get("payload", "exfil_credentials.py")
                 policy = body.get("policy", "strict")
                 net = body.get("net", "none")
+                vm = bool(body.get("vm", False))
                 if state.running:
                     self._send(409, b'{"error":"a session is already running"}')
                     return
                 threading.Thread(
-                    target=state.run_sample, args=(payload, policy, net),
+                    target=state.run_sample, args=(payload, policy, net, vm),
                     daemon=True,
                 ).start()
                 self._send(200, b'{"status":"started"}')
@@ -437,6 +509,7 @@ def make_handler(state: DashboardState):
             q = parse_qs(urlparse(self.path).query)
             policy = (q.get("policy") or ["strict"])[0]
             net = (q.get("net") or ["none"])[0]
+            vm = (q.get("vm") or ["0"])[0] in ("1", "true", "True")
             filename = self.headers.get("X-Filename", "upload.py")
 
             ok, msg, interp = state.validate_upload(filename, data)
@@ -446,7 +519,7 @@ def make_handler(state: DashboardState):
 
             threading.Thread(
                 target=state.run_session,
-                args=(msg, data, interp, policy, net, "upload"),
+                args=(msg, data, interp, policy, net, "upload", vm),
                 daemon=True,
             ).start()
             self._send(200, json.dumps({"status": "started", "filename": msg,
