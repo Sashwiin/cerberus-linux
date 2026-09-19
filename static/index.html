@@ -161,28 +161,62 @@ button.btn:disabled{opacity:.5;cursor:not-allowed}
 /* ------------------------------------------------------------- centre */
 .centre-col{display:flex;flex-direction:column;gap:16px}
 .cube-card{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:36px 18px;min-height:340px}
-.cube-stage{perspective:900px;width:170px;height:170px;position:relative}
-.cube{width:100%;height:100%;position:relative;transform-style:preserve-3d;
+.cube-stage{perspective:1100px;width:190px;height:190px;position:relative;margin-bottom:14px}
+.cube-stage::after{content:'';position:absolute;left:50%;bottom:-22px;width:132px;height:20px;
+  transform:translateX(-50%);border-radius:50%;
+  background:radial-gradient(ellipse at center, rgba(15,23,42,.20), rgba(15,23,42,0) 72%);
+  filter:blur(1px);transition:background .3s}
+.cube-stage.frozen::after{background:radial-gradient(ellipse at center, rgba(220,38,38,.16), rgba(220,38,38,0) 72%)}
+.cube-stage.clean::after{background:radial-gradient(ellipse at center, rgba(22,163,74,.14), rgba(22,163,74,0) 72%)}
+.cube{width:100%;height:100%;position:relative;transform-style:preserve-3d;will-change:transform;
   transform:rotateX(-28deg) rotateY(38deg);
-  animation:cube-idle 10s linear infinite;transition:filter .3s}
-.cube.running{animation:cube-spin 3.2s linear infinite}
+  animation:cube-idle 9s ease-in-out infinite}
+.cube.running{animation:cube-spin 3.4s linear infinite}
 .cube.frozen{animation:none;transform:rotateX(-28deg) rotateY(38deg)}
 .cube.clean{animation:none;transform:rotateX(-20deg) rotateY(30deg)}
+/* Glow lives on the individual faces (box-shadow), never as a `filter` on
+   `.cube` itself: a CSS `filter` on an element forces its
+   `transform-style: preserve-3d` subtree to flatten to 2D before painting,
+   which silently collapses the cube into a flat card. Box-shadow has no
+   such restriction. */
 @keyframes cube-idle{0%,100%{transform:rotateX(-28deg) rotateY(30deg)}50%{transform:rotateX(-24deg) rotateY(46deg)}}
 @keyframes cube-spin{from{transform:rotateX(-28deg) rotateY(0deg)}to{transform:rotateX(-28deg) rotateY(360deg)}}
-.face{position:absolute;width:170px;height:170px;background:rgba(255,255,255,.55);
-  border:1px solid rgba(2,132,199,.35);backdrop-filter:blur(4px);
+.cube-core{position:absolute;left:50%;top:50%;width:38px;height:38px;margin:-19px 0 0 -19px;border-radius:50%;
+  transform:translateZ(0);background:radial-gradient(circle at 34% 32%, rgba(56,189,248,.95), rgba(2,132,199,.22) 58%, transparent 74%);
+  box-shadow:0 0 26px 7px rgba(2,132,199,.32);animation:core-pulse 2.6s ease-in-out infinite;
+  transition:background .35s, box-shadow .35s}
+.cube.running .cube-core{animation:core-pulse 1s ease-in-out infinite}
+.cube.frozen .cube-core{animation:none;background:radial-gradient(circle at 34% 32%, rgba(248,113,113,.95), rgba(220,38,38,.22) 58%, transparent 74%);
+  box-shadow:0 0 30px 9px rgba(220,38,38,.38)}
+.cube.clean .cube-core{animation:none;background:radial-gradient(circle at 34% 32%, rgba(74,222,128,.95), rgba(22,163,74,.22) 58%, transparent 74%);
+  box-shadow:0 0 26px 7px rgba(22,163,74,.32)}
+@keyframes core-pulse{0%,100%{opacity:.5;transform:translateZ(0) scale(.88)}50%{opacity:1;transform:translateZ(0) scale(1.08)}}
+.face{position:absolute;width:190px;height:190px;border-radius:7px;
+  background:linear-gradient(150deg, rgba(255,255,255,.8), rgba(255,255,255,.32));
+  border:1px solid rgba(2,132,199,.32);backdrop-filter:blur(4px);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.65), inset 0 -14px 22px -16px rgba(15,23,42,.14), 0 0 0 1px rgba(2,132,199,.05);
   display:flex;align-items:center;justify-content:center;transition:background .3s,border-color .3s,box-shadow .3s}
-.cube.frozen .face{border-color:var(--red);background:rgba(254,226,226,.6);box-shadow:inset 0 0 24px rgba(220,38,38,.15)}
-.cube.clean .face{border-color:var(--green);background:rgba(220,252,231,.55)}
-.cube.running .face{box-shadow:inset 0 0 24px rgba(2,132,199,.12)}
-.face.front{transform:translateZ(85px)}
-.face.back{transform:rotateY(180deg) translateZ(85px)}
-.face.right{transform:rotateY(90deg) translateZ(85px)}
-.face.left{transform:rotateY(-90deg) translateZ(85px)}
-.face.top{transform:rotateX(90deg) translateZ(85px)}
-.face.bottom{transform:rotateX(-90deg) translateZ(85px)}
-.face .mark{font-family:var(--font-mono);font-size:9px;color:var(--cyan);letter-spacing:.06em;text-align:center;opacity:.85}
+.face.top{background:linear-gradient(150deg, rgba(255,255,255,.95), rgba(255,255,255,.6))}
+.face.bottom{background:linear-gradient(150deg, rgba(226,232,240,.6), rgba(203,213,225,.35))}
+.face.back,.face.left{background:linear-gradient(150deg, rgba(241,245,249,.58), rgba(226,232,240,.3))}
+.cube.frozen .face{border-color:var(--red);
+  background:linear-gradient(150deg, rgba(254,226,226,.88), rgba(254,202,202,.45));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.5), inset 0 0 28px rgba(220,38,38,.2),
+    0 0 20px rgba(220,38,38,.3)}
+.cube.clean .face{border-color:var(--green);
+  background:linear-gradient(150deg, rgba(220,252,231,.88), rgba(187,247,208,.45));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.5), inset 0 0 24px rgba(22,163,74,.16),
+    0 0 16px rgba(22,163,74,.24)}
+.cube.running .face{box-shadow:inset 0 1px 0 rgba(255,255,255,.55), inset 0 0 28px rgba(2,132,199,.18),
+    0 0 16px rgba(2,132,199,.22)}
+.face.front{transform:translateZ(95px)}
+.face.back{transform:rotateY(180deg) translateZ(95px)}
+.face.right{transform:rotateY(90deg) translateZ(95px)}
+.face.left{transform:rotateY(-90deg) translateZ(95px)}
+.face.top{transform:rotateX(90deg) translateZ(95px)}
+.face.bottom{transform:rotateX(-90deg) translateZ(95px)}
+.face .mark{font-family:var(--font-mono);font-size:9px;color:var(--cyan);letter-spacing:.07em;text-align:center;
+  opacity:.88;text-shadow:0 1px 0 rgba(255,255,255,.6);position:relative;z-index:1}
 .cube.frozen .face .mark{color:var(--red)}
 .cube.clean .face .mark{color:var(--green)}
 .cube-caption{margin-top:22px;text-align:center}
@@ -420,8 +454,9 @@ button.btn:disabled{opacity:.5;cursor:not-allowed}
     <!-- centre: enclave cube + verdict -->
     <div class="centre-col">
       <div class="card glass2 cube-card">
-        <div class="cube-stage">
+        <div class="cube-stage" id="cubeStage">
           <div class="cube" id="cube">
+            <div class="cube-core"></div>
             <div class="face front"><span class="mark">ENCLAVE<br>ISOLATED TMPFS</span></div>
             <div class="face back"><span class="mark">CGROUP V2</span></div>
             <div class="face right"><span class="mark">SECCOMP<br>NOTIFY</span></div>
@@ -586,6 +621,7 @@ function setStage(name, isError, force){
 function setCube(cls, big, sub){
   const cube=$('#cube'), cap=$('#cubeCaption'), chip=$('#workloadChip');
   cube.className='cube '+cls;
+  $('#cubeStage').className='cube-stage '+cls;
   cap.className='cube-caption state-'+cls;
   $('#cubeBig').textContent=big; $('#cubeSub').textContent=sub;
   chip.className='workload-chip glass1 '+cls;
