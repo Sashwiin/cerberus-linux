@@ -34,6 +34,24 @@ if ! command -v pkexec >/dev/null 2>&1 && ! command -v sudo >/dev/null 2>&1; the
   echo "warning: neither pkexec nor sudo found; the sandbox server needs root." >&2
 fi
 
+# QtWebEngine's native-Wayland Qt platform plugin has long-standing
+# compositing bugs on some driver/compositor combos: elements that need a
+# GPU-composited layer (3D CSS transforms, backdrop-filter blur -- exactly
+# what the dashboard's isometric cube and glass panels use) can render as
+# blank/black instead of their real content, while everything else on the
+# page looks fine. Running the same QtWebEngine through XWayland instead of
+# native Wayland is the standard fix. So: if this looks like a Wayland
+# session, default to the xcb (X11/XWayland) platform plugin. This is a
+# platform-plugin switch, not a rendering-quality tradeoff like the GPU
+# flags were -- it shouldn't cost you anything. Set CERBERUS_QPA=wayland to
+# force native Wayland back on (e.g. to compare), or to any other Qt
+# platform name to force that instead.
+if [ -n "${WAYLAND_DISPLAY:-}" ] && [ "${CERBERUS_QPA:-xcb}" != "wayland" ]; then
+  export QT_QPA_PLATFORM="${CERBERUS_QPA:-xcb}"
+  echo "Wayland session detected — running the WebEngine view through XWayland (QT_QPA_PLATFORM=$QT_QPA_PLATFORM)."
+  echo "(set CERBERUS_QPA=wayland to force native Wayland instead)"
+fi
+
 cd "$HERE"
 # Wipe stale compiled bytecode so an extract-over-old-copy can't run old code.
 find "$HERE" -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
