@@ -39,4 +39,25 @@ cd "$HERE"
 find "$HERE" -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
 ver="$(python3 -c 'import cerberus; print(cerberus.__version__)' 2>/dev/null || echo '?')"
 echo "Cerberus v$ver  —  running from $(pwd)"
-exec python3 -B -m cerberus.gui_qt   # -B: don't write .pyc, never reuse stale ones
+
+# QtWebEngine's embedded Chromium sometimes spams harmless GL warnings on
+# Linux (gles2_cmd_decoder.cc, glCopyTexSubImage2D, "framebuffer incomplete")
+# from its GPU compositor. Forcing software rendering to silence them turned
+# out to be the wrong trade: the dashboard's isometric cube (3D CSS
+# transforms) and glass-panel blur both rely on GPU compositing, so
+# disabling it flattened the cube into a gray box and broke the blur
+# surfaces. So: leave GPU compositing on (this is what actually worked), and
+# just filter the known-noisy lines out of the terminal instead. Set
+# CERBERUS_RAW_LOGS=1 to see everything unfiltered (useful if you're
+# debugging a *real* WebEngine problem, since this filter is pattern-based
+# and could in theory hide something relevant).
+NOISE_PATTERN='gles2_cmd_decoder\.cc|GpuRasterization|GL_INVALID_FRAMEBUFFER_OPERATION|GL_INVALID_OPERATION.*glCopyTexSubImage2D|RENDER WARNING: texture bound to texture unit'
+
+if [ "${CERBERUS_RAW_LOGS:-0}" = "1" ] || ! command -v grep >/dev/null 2>&1; then
+  exec python3 -B -m cerberus.gui_qt   # -B: don't write .pyc, never reuse stale ones
+else
+  # Process substitution (bash-only, fine: the shebang is bash) -- filters
+  # stderr through grep -v without touching stdout or the exit code.
+  python3 -B -m cerberus.gui_qt 2> >(grep --line-buffered -Ev "$NOISE_PATTERN" >&2)
+  exit $?
+fi
